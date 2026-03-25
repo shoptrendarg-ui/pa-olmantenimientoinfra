@@ -218,12 +218,17 @@ async function getSettingsDoc() {
 }
 function csvEscape(v) {
   const s = String(v ?? '');
-  return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  return /[",
+;]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCsv(rows) {
   if (!rows.length) return '';
   const headers = Object.keys(rows[0]);
-  return [headers.join(';'), ...rows.map(r => headers.map(h => csvEscape(r[h])).join(';'))].join('\n');
+  return [
+    headers.join(';'),
+    ...rows.map(r => headers.map(h => csvEscape(r[h])).join(';'))
+  ].join('
+');
 }
 async function queryItems(data={}) {
   let rows = (await allDocs('items')).map(mapItem);
@@ -562,29 +567,31 @@ window.firebaseCompatApi = async function(action, data={}) {
         } else if (tipo === 'stock_critico') {
           rows = items.filter(i => i.tipo==='consumible' && i.stock <= i.stockMinimo).map(i => ({ nombre:i.nombre, categoria:i.categoria, stock:i.stock, minimo:i.stockMinimo }));
         } else if (tipo === 'prestamos_activos') {
-          rows = loans.filter(l => l.estado==='activo').map(l => ({ articulo:l.articuloNombre, destinatario:l.destinatario, fechaInicio:l.fechaInicio, fechaDevolucionEsperada:l.fechaDevolucionEsperada, proposito:l.proposito }));
+          rows = loans.filter(x => x.estado === 'activo').map(l => ({ articulo:l.articuloNombre, destinatario:l.destinatario, fechaPrestamo:l.fechaPrestamo, fechaDevolucionEsperada:l.fechaDevolucionEsperada }));
         } else if (tipo === 'prestamos_vencidos') {
-          rows = loans.filter(l => l.estado==='activo' && l.vencido).map(l => ({ articulo:l.articuloNombre, destinatario:l.destinatario, diasVencido:l.diasTranscurridos, fechaDevolucionEsperada:l.fechaDevolucionEsperada }));
+          rows = loans.filter(x => x.estado === 'activo' && x.vencido).map(l => ({ articulo:l.articuloNombre, destinatario:l.destinatario, fechaDevolucionEsperada:l.fechaDevolucionEsperada, diasVencido:l.diasVencido }));
         } else if (tipo === 'top_articulos') {
           const grp = {};
-          movs.forEach(m => { if (m.articuloNombre) grp[m.articuloNombre] = (grp[m.articuloNombre] || 0) + 1; });
+          movs.filter(m => ['prestamo','entrega'].includes(m.tipo)).forEach(m => { grp[m.articuloNombre] = (grp[m.articuloNombre] || 0) + Number(m.cantidad || 1); });
           rows = Object.entries(grp).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([articulo,total]) => ({ articulo, total }));
         } else if (tipo === 'sin_movimiento') {
-          const cutoff = Date.now() - 60*86400000;
-          const used = new Set(movs.filter(m => new Date(m.fecha).getTime() >= cutoff).map(m => m.articuloId));
-          rows = items.filter(i => !used.has(i.id)).map(i => ({ articulo:i.nombre, categoria:i.categoria, ubicacion:i.ubicacion }));
+          const limite = Date.now() - 60*24*60*60*1000;
+          const ultimo = {};
+          movs.forEach(m => { ultimo[m.articuloId] = Math.max(ultimo[m.articuloId] || 0, new Date(m.fecha).getTime() || 0); });
+          rows = items.filter(i => !ultimo[i.id] || ultimo[i.id] < limite).map(i => ({ articulo:i.nombre, categoria:i.categoria, ubicacion:i.ubicacion }));
         } else if (tipo === 'multiples_prestamos') {
           const grp = {};
-          loans.filter(l => l.estado==='activo').forEach(l => { grp[l.destinatario] = (grp[l.destinatario] || 0) + 1; });
-          rows = Object.entries(grp).filter(([,c])=>c>1).map(([destinatario,total])=>({ destinatario,total }));
+          loans.filter(x => x.estado === 'activo').forEach(l => { grp[l.destinatario] = (grp[l.destinatario] || 0) + 1; });
+          rows = Object.entries(grp).filter(([,c])=>c>1).map(([destinatario,total]) => ({ destinatario, total }));
         } else if (tipo === 'movimientos_periodo') {
           rows = movs.map(m => ({ fecha:m.fecha, tipo:m.tipo, articulo:m.articuloNombre, categoria:m.categoria, destinatario:m.destinatario, cantidad:m.cantidad, usuario:m.usuario }));
         }
-        return { success:true, rows, html: rows.length ? '<pre style="white-space:pre-wrap;font-size:12px">' + JSON.stringify(rows.slice(0,50), null, 2) + '</pre>' : '<div class="card"><p>Sin datos</p></div>' };
+        const headers = rows.length ? Object.keys(rows[0]).map(k => k.replace(/([A-Z])/g,' $1').replace(/^./, s => s.toUpperCase())) : [];
+        return { success:true, datos: rows, headers };
       }
       case 'exportCSV': {
         const rep = await window.firebaseCompatApi('getReportes', { tipo:data.tipo });
-        return { success:true, csv: buildCsv(rep.rows || []), filename: `${data.tipo || 'reporte'}.csv` };
+        return { success:true, csv: buildCsv(rep.datos || []), filename: `${data.tipo || 'reporte'}.csv` };
       }
       default:
         return { success:false, error:'Acción Firebase no implementada: ' + action };
@@ -1362,44 +1369,118 @@ async function submitMR() {
 // ================================================================
 // CATÁLOGO
 // ================================================================
-async function renderCatalogo() {
+async async function renderCatalogo() {
   setTopbarActions(hasPermission(['admin','encargado'])?'<button class="topbar-btn gold" onclick="openModalNuevoArticulo()">+ Nuevo Artículo</button>':'');
-  const res=await api('getArticulos',{filtro:{}});
+  const res = await api('getArticulos', { filtro:{} });
   if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
-  appData.articulos=res.articulos;
-  const catOpts=[...new Set(res.articulos.map(a=>a.categoria))].map(c=>`<option value="${c}">${c}</option>`).join('');
-  const rows=res.articulos.map(a=>`<tr>
-    <td data-label="Nombre"><strong>${a.nombre}</strong><br><span style="font-size:11px;color:var(--text-muted)">${a.descripcion||''}</span></td>
-    <td data-label="Categoría"><span class="badge badge-navy">${a.categoria}</span></td>
-    <td data-label="Tipo">${a.tipo==='consumible'?'<span class="badge badge-info">Consumible</span>':'<span class="badge badge-gray">Reutilizable</span>'}</td>
-    <td data-label="Stock/Estado">${a.tipo==='consumible'?getStockBadge(a.stock,a.stockMinimo):getEstadoBadge(a.estado)}</td>
-    <td data-label="Ubicación">${a.ubicacion||'—'}</td>
-    <td data-label="Nro Pat.">${a.nroPatrimonial||'—'}</td>
-    <td data-label="Acciones">${hasPermission(['admin','encargado'])?`<div style="display:flex;gap:4px">
-      <button class="btn btn-outline btn-sm btn-icon" onclick="openModalEditarArticulo('${a.id}')" title="Editar">✏️</button>
-      <button class="btn btn-outline btn-sm btn-icon" onclick="openModalCambiarEstado('${a.id}','${escHtml(a.nombre)}')" title="Estado">🔄</button>
-    </div>`:''}</td>
-  </tr>`).join('')||`<tr><td colspan="7" class="table-empty">Sin artículos registrados</td></tr>`;
+
+  appData.articulos = res.articulos || [];
+
+  const catOpts = [...new Set(appData.articulos.map(a => a.categoria).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'es'))
+    .map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`)
+    .join('');
+
   showPage(`
     <div class="filters-bar">
       <input type="text" class="filter-input wide" id="f-buscar" placeholder="🔍 Buscar por nombre, descripción o patrimonio..." oninput="filtrarCatalogo()">
-      <select class="filter-input" id="f-tipo" onchange="filtrarCatalogo()"><option value="">Todos los tipos</option><option value="consumible">Consumibles</option><option value="reutilizable">Reutilizables</option></select>
-      <select class="filter-input" id="f-cat" onchange="filtrarCatalogo()"><option value="">Todas las categorías</option>${catOpts}</select>
-      <select class="filter-input" id="f-estado" onchange="filtrarCatalogo()"><option value="">Todos los estados</option><option value="disponible">Disponible</option><option value="prestado">Prestado</option><option value="en_reparacion">En reparación</option><option value="fuera_servicio">Fuera de servicio</option><option value="extraviado">Extraviado</option></select>
+      <select class="filter-input" id="f-tipo" onchange="filtrarCatalogo()">
+        <option value="">Todos los tipos</option>
+        <option value="consumible">Consumibles</option>
+        <option value="reutilizable">Reutilizables</option>
+      </select>
+      <select class="filter-input" id="f-cat" onchange="filtrarCatalogo()">
+        <option value="">Todas las categorías</option>
+        ${catOpts}
+      </select>
+      <select class="filter-input" id="f-estado" onchange="filtrarCatalogo()">
+        <option value="">Todos los estados</option>
+        <option value="disponible">Disponible</option>
+        <option value="prestado">Prestado</option>
+        <option value="en_reparacion">En reparación</option>
+        <option value="fuera_servicio">Fuera de servicio</option>
+        <option value="extraviado">Extraviado</option>
+      </select>
     </div>
-    <div class="card"><div class="table-wrap"><table>
-      <thead><tr><th>Nombre</th><th>Categoría</th><th>Tipo</th><th>Stock/Estado</th><th>Ubicación</th><th>Nro Pat.</th><th>Acciones</th></tr></thead>
-      <tbody id="catalogo-body">${rows}</tbody>
-    </table></div></div>`);
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Categoría</th>
+              <th>Tipo</th>
+              <th>Stock/Estado</th>
+              <th>Ubicación</th>
+              <th>Nro Pat.</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="catalogo-body"></tbody>
+        </table>
+      </div>
+    </div>
+  `);
+
+  filtrarCatalogo();
 }
 function filtrarCatalogo() {
-  const b=document.getElementById('f-buscar').value.toLowerCase();
-  const t=document.getElementById('f-tipo').value;
-  const c=document.getElementById('f-cat').value;
-  const e=document.getElementById('f-estado').value;
-  document.querySelectorAll('#catalogo-body tr').forEach(tr=>{
-    tr.style.display=(!b||tr.textContent.toLowerCase().includes(b))&&(!t||tr.innerHTML.includes(t))&&(!c||tr.innerHTML.includes(c))&&(!e||tr.innerHTML.includes(e))?'':'none';
+  const b = (document.getElementById('f-buscar')?.value || '').trim().toLowerCase();
+  const t = document.getElementById('f-tipo')?.value || '';
+  const c = document.getElementById('f-cat')?.value || '';
+  const e = document.getElementById('f-estado')?.value || '';
+
+  let rowsData = [...(appData.articulos || [])];
+
+  rowsData = rowsData.filter(a => {
+    const texto = [
+      a.nombre || '',
+      a.descripcion || '',
+      a.nroPatrimonial || '',
+      a.ubicacion || '',
+      a.categoria || '',
+      a.observaciones || ''
+    ].join(' ').toLowerCase();
+
+    if (b && !texto.includes(b)) return false;
+    if (t && a.tipo !== t) return false;
+    if (c && a.categoria !== c) return false;
+    if (e && (a.estado || '') !== e) return false;
+
+    return true;
   });
+
+  const rows = rowsData.map(a => `
+    <tr>
+      <td data-label="Nombre">
+        <strong>${escHtml(a.nombre)}</strong><br>
+        <span style="font-size:11px;color:var(--text-muted)">${escHtml(a.descripcion || '')}</span>
+      </td>
+      <td data-label="Categoría"><span class="badge badge-navy">${escHtml(a.categoria || '—')}</span></td>
+      <td data-label="Tipo">
+        ${a.tipo === 'consumible'
+          ? '<span class="badge badge-info">Consumible</span>'
+          : '<span class="badge badge-gray">Reutilizable</span>'}
+      </td>
+      <td data-label="Stock/Estado">
+        ${a.tipo === 'consumible'
+          ? getStockBadge(a.stock, a.stockMinimo)
+          : getEstadoBadge(a.estado)}
+      </td>
+      <td data-label="Ubicación">${escHtml(a.ubicacion || '—')}</td>
+      <td data-label="Nro Pat.">${escHtml(a.nroPatrimonial || '—')}</td>
+      <td data-label="Acciones">
+        ${hasPermission(['admin','encargado']) ? `
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-outline btn-sm btn-icon" onclick="openModalEditarArticulo('${a.id}')" title="Editar">✏️</button>
+            <button class="btn btn-outline btn-sm btn-icon" onclick="openModalCambiarEstado('${a.id}','${escHtml(a.nombre)}')" title="Estado">🔄</button>
+          </div>
+        ` : ''}
+      </td>
+    </tr>
+  `).join('') || `<tr><td colspan="7" class="table-empty">Sin artículos para ese filtro</td></tr>`;
+
+  document.getElementById('catalogo-body').innerHTML = rows;
 }
 
 // ================================================================
@@ -1660,50 +1741,103 @@ async function submitIngreso() {
 // ================================================================
 // HISTORIAL
 // ================================================================
-async function renderHistorial() {
+async async function renderHistorial() {
   setTopbarActions(`<button class="topbar-btn" onclick="exportHistorial()">⬇️ <span>Exportar CSV</span></button>`);
-  const res=await api('getMovimientos',{filtro:{limite:200}});
+  const res = await api('getMovimientos', { filtro:{ limite:200 } });
   if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
-  const TM = {
-    ingreso:      {l:'Ingreso',      cl:'badge-success', i:'📨'},
-    entrega:      {l:'Entrega',      cl:'badge-info',    i:'📤'},
-    prestamo:     {l:'Préstamo',     cl:'badge-navy',    i:'📋'},
-    devolucion:   {l:'Devolución',   cl:'badge-gray',    i:'📥'},
-    cambio_estado:{l:'Cambio Estado',cl:'badge-warning', i:'🔄'}
-  };
-  const rows=res.movimientos.map(m=>{
-    const t=TM[m.tipo]||{l:m.tipo,cl:'badge-gray',i:'📌'};
-    return `<tr>
-      <td data-label="Fecha">${formatDate(m.fecha)}</td>
-      <td data-label="Tipo"><span class="badge ${t.cl}">${t.i} ${t.l}</span></td>
-      <td data-label="Artículo"><strong>${m.articuloNombre}</strong></td>
-      <td data-label="Categoría">${m.categoria||'—'}</td>
-      <td data-label="Destinatario">${m.destinatario||'—'}</td>
-      <td data-label="Cantidad">${m.cantidad||'—'}</td>
-      <td data-label="Usuario">${m.usuario}</td>
-      <td data-label="Observaciones" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'—'}</td></tr>`;
-  }).join('')||`<tr><td colspan="8" class="table-empty">Sin movimientos</td></tr>`;
+
+  appData.historialMovimientos = res.movimientos || [];
+
   showPage(`
     <div class="filters-bar">
       <input type="text" class="filter-input wide" id="h-buscar" placeholder="🔍 Buscar..." oninput="filtrarHistorial()">
       <select class="filter-input" id="h-tipo" onchange="filtrarHistorial()">
-        <option value="">Todos los tipos</option><option value="ingreso">Ingreso</option><option value="entrega">Entrega</option>
-        <option value="prestamo">Préstamo</option><option value="devolucion">Devolución</option><option value="cambio_estado">Cambio Estado</option>
+        <option value="">Todos los tipos</option>
+        <option value="ingreso">Ingreso</option>
+        <option value="entrega">Entrega</option>
+        <option value="prestamo">Préstamo</option>
+        <option value="devolucion">Devolución</option>
+        <option value="cambio_estado">Cambio Estado</option>
       </select>
       <input type="date" class="filter-input" id="h-desde" onchange="filtrarHistorial()">
       <input type="date" class="filter-input" id="h-hasta" onchange="filtrarHistorial()">
     </div>
-    <div class="card"><div class="table-wrap"><table>
-      <thead><tr><th>Fecha</th><th>Tipo</th><th>Artículo</th><th>Categoría</th><th>Destinatario</th><th>Cant.</th><th>Usuario</th><th>Observaciones</th></tr></thead>
-      <tbody id="historial-body">${rows}</tbody>
-    </table></div></div>`);
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Tipo</th>
+              <th>Artículo</th>
+              <th>Categoría</th>
+              <th>Destinatario</th>
+              <th>Cant.</th>
+              <th>Usuario</th>
+              <th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody id="historial-body"></tbody>
+        </table>
+      </div>
+    </div>
+  `);
+
+  filtrarHistorial();
 }
 function filtrarHistorial() {
-  const b=document.getElementById('h-buscar').value.toLowerCase();
-  const t=document.getElementById('h-tipo').value;
-  document.querySelectorAll('#historial-body tr').forEach(tr=>{
-    tr.style.display=(!b||tr.textContent.toLowerCase().includes(b))&&(!t||tr.innerHTML.includes(t))?'':'none';
+  const b = (document.getElementById('h-buscar')?.value || '').trim().toLowerCase();
+  const t = document.getElementById('h-tipo')?.value || '';
+  const desde = document.getElementById('h-desde')?.value || '';
+  const hasta = document.getElementById('h-hasta')?.value || '';
+
+  const TM = {
+    ingreso:      {l:'Ingreso',       cl:'badge-success', i:'📨'},
+    entrega:      {l:'Entrega',       cl:'badge-info',    i:'📤'},
+    prestamo:     {l:'Préstamo',      cl:'badge-navy',    i:'📋'},
+    devolucion:   {l:'Devolución',    cl:'badge-gray',    i:'📥'},
+    cambio_estado:{l:'Cambio Estado', cl:'badge-warning', i:'🔄'}
+  };
+
+  let rowsData = [...(appData.historialMovimientos || [])];
+
+  rowsData = rowsData.filter(m => {
+    const texto = [
+      m.articuloNombre || '',
+      m.categoria || '',
+      m.destinatario || '',
+      m.usuario || '',
+      m.observaciones || '',
+      m.tipo || ''
+    ].join(' ').toLowerCase();
+
+    if (b && !texto.includes(b)) return false;
+    if (t && m.tipo !== t) return false;
+
+    const fechaMov = m.fecha ? String(m.fecha).slice(0,10) : '';
+    if (desde && fechaMov && fechaMov < desde) return false;
+    if (hasta && fechaMov && fechaMov > hasta) return false;
+
+    return true;
   });
+
+  const rows = rowsData.map(m => {
+    const tipoMeta = TM[m.tipo] || {l:m.tipo || '—', cl:'badge-gray', i:'📌'};
+    return `
+      <tr>
+        <td data-label="Fecha">${formatDate(m.fecha)}</td>
+        <td data-label="Tipo"><span class="badge ${tipoMeta.cl}">${tipoMeta.i} ${tipoMeta.l}</span></td>
+        <td data-label="Artículo"><strong>${escHtml(m.articuloNombre || '—')}</strong></td>
+        <td data-label="Categoría">${escHtml(m.categoria || '—')}</td>
+        <td data-label="Destinatario">${escHtml(m.destinatario || '—')}</td>
+        <td data-label="Cantidad">${escHtml(m.cantidad ?? '—')}</td>
+        <td data-label="Usuario">${escHtml(m.usuario || '—')}</td>
+        <td data-label="Observaciones" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(m.observaciones || '—')}</td>
+      </tr>
+    `;
+  }).join('') || `<tr><td colspan="8" class="table-empty">Sin movimientos para ese filtro</td></tr>`;
+
+  document.getElementById('historial-body').innerHTML = rows;
 }
 async function exportHistorial() { const res=await api('exportCSV',{tipo:'movimientos_periodo'}); if(res.success) downloadCSV(res.csv,res.filename); else toast('Error al exportar','error'); }
 
