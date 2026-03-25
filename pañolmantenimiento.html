@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Sistema de Pañol — UNSL</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy:#1B2A4A; --navy-dark:#0F1A30; --navy-mid:#243660; --navy-light:#2E4580;
+  --gold:#C9A84C; --gold-light:#E2C577; --gold-dark:#A07C30;
+  --white:#FFFFFF; --bg:#F0F4FA; --bg-card:#FFFFFF; --border:#D6DFEF;
+  --text:#1B2A4A; --text-muted:#6B7FA3; --text-light:#9AABC9;
+  --success:#16A34A; --warning:#D97706; --danger:#DC2626; --info:#2563EB;
+  --sidebar-w:260px; --topbar-h:60px; --radius:10px;
+  --shadow:0 4px 20px rgba(27,42,74,0.10); --shadow-lg:0 8px 40px rgba(27,42,74,0.16);
+  --transition:all 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+html { font-size:15px; }
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; }
+h1,h2,h3,h4 { font-family:'Cormorant Garamond',serif; font-weight:700; line-height:1.2; }
+button { cursor:pointer; border:none; font-family:'DM Sans',sans-serif; }
+input, select, textarea { font-family:'DM Sans',sans-serif; }
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
+
+/* ── LOGIN ── */
+#login-screen { min-height:100vh; background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 50%,var(--navy-mid) 100%); display:flex; align-items:center; justify-content:center; padding:20px; position:relative; overflow:hidden; }
+#login-screen::before { content:''; position:absolute; top:-40%; left:-20%; width:600px; height:600px; background:radial-gradient(circle,rgba(201,168,76,0.08) 0%,transparent 70%); pointer-events:none; }
+#login-screen::after  { content:''; position:absolute; bottom:-30%; right:-15%; width:500px; height:500px; background:radial-gradient(circle,rgba(201,168,76,0.06) 0%,transparent 70%); pointer-events:none; }
+.login-card { background:rgba(255,255,255,0.04); backdrop-filter:blur(20px); border:1px solid rgba(201,168,76,0.2); border-radius:20px; padding:48px 44px; width:100%; max-width:420px; position:relative; z-index:1; animation:fadeUp 0.6s ease forwards; }
+.login-logo { text-align:center; margin-bottom:36px; }
+.login-logo-icon { width:70px; height:70px; background:linear-gradient(135deg,var(--gold-dark),var(--gold)); border-radius:18px; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:30px; box-shadow:0 8px 24px rgba(201,168,76,0.35); }
+.login-logo h1 { color:var(--gold); font-size:28px; letter-spacing:1px; }
+.login-logo p  { color:rgba(255,255,255,0.5); font-size:12px; letter-spacing:2px; text-transform:uppercase; margin-top:4px; }
+.login-field { margin-bottom:18px; }
+.login-field label { display:block; color:rgba(255,255,255,0.7); font-size:12px; font-weight:500; letter-spacing:0.5px; margin-bottom:7px; text-transform:uppercase; }
+.login-field input { width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:12px 16px; color:white; font-size:14px; transition:var(--transition); outline:none; }
+.login-field input:focus { border-color:var(--gold); background:rgba(201,168,76,0.08); }
+.login-field input::placeholder { color:rgba(255,255,255,0.3); }
+.login-btn { width:100%; background:linear-gradient(135deg,var(--gold-dark),var(--gold)); color:var(--navy-dark); font-size:15px; font-weight:700; letter-spacing:0.5px; padding:14px; border-radius:8px; margin-top:8px; transition:var(--transition); box-shadow:0 4px 16px rgba(201,168,76,0.3); cursor:pointer; border:none; }
+.login-btn:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(201,168,76,0.45); }
+.login-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
+.login-error { background:rgba(220,38,38,0.15); border:1px solid rgba(220,38,38,0.3); border-radius:6px; color:#fca5a5; padding:10px 14px; font-size:13px; margin-bottom:16px; display:none; }
+.login-roles { margin-top:24px; border-top:1px solid rgba(255,255,255,0.08); padding-top:20px; }
+.login-roles p { color:rgba(255,255,255,0.4); font-size:11px; text-align:center; margin-bottom:12px; text-transform:uppercase; letter-spacing:1px; }
+.login-role-pills { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+.role-pill { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:99px; padding:4px 12px; font-size:11px; color:rgba(255,255,255,0.5); cursor:pointer; transition:var(--transition); }
+.role-pill:hover { background:rgba(201,168,76,0.12); border-color:rgba(201,168,76,0.3); color:var(--gold-light); }
+
+/* ── LAYOUT ── */
+#app { display:none; min-height:100vh; }
+.sidebar { position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; background:var(--navy-dark); display:flex; flex-direction:column; z-index:200; transition:transform 0.3s ease; overflow-y:auto; }
+.sidebar-header { padding:20px 20px 16px; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
+.sidebar-brand { display:flex; align-items:center; gap:12px; }
+.sidebar-brand-icon { width:40px; height:40px; background:linear-gradient(135deg,var(--gold-dark),var(--gold)); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.sidebar-brand-text h2 { color:var(--gold); font-size:16px; }
+.sidebar-brand-text p  { color:var(--text-muted); font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-top:1px; }
+.sidebar-user { padding:14px 20px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.sidebar-user-avatar { width:34px; height:34px; background:var(--navy-light); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+.sidebar-user-info p:first-child { color:var(--white); font-size:13px; font-weight:500; }
+.sidebar-user-info p:last-child  { color:var(--gold); font-size:11px; text-transform:uppercase; letter-spacing:0.5px; }
+.sidebar-nav { flex:1; padding:12px 0; overflow-y:auto; }
+.nav-section { padding:8px 20px 4px; color:var(--text-light); font-size:10px; text-transform:uppercase; letter-spacing:2px; font-weight:500; }
+.nav-item { display:flex; align-items:center; gap:10px; padding:9px 20px; color:rgba(255,255,255,0.6); cursor:pointer; transition:var(--transition); position:relative; font-size:13.5px; }
+.nav-item:hover { background:rgba(255,255,255,0.05); color:rgba(255,255,255,0.9); }
+.nav-item.active { background:rgba(201,168,76,0.12); color:var(--gold-light); font-weight:600; }
+.nav-item.active::before { content:''; position:absolute; left:0; top:0; width:3px; height:100%; background:var(--gold); border-radius:0 2px 2px 0; }
+.nav-icon { font-size:16px; width:20px; text-align:center; flex-shrink:0; }
+.nav-badge { margin-left:auto; background:var(--danger); color:white; font-size:10px; font-weight:700; padding:2px 6px; border-radius:99px; min-width:18px; text-align:center; }
+.sidebar-logout { padding:12px 20px; border-top:1px solid rgba(255,255,255,0.06); flex-shrink:0; }
+.logout-btn { display:flex; align-items:center; gap:10px; color:rgba(255,255,255,0.4); font-size:13px; padding:8px 10px; border-radius:6px; transition:var(--transition); background:transparent; width:100%; border:none; cursor:pointer; }
+.logout-btn:hover { color:#fca5a5; background:rgba(220,38,38,0.1); }
+.main-content { margin-left:var(--sidebar-w); min-height:100vh; display:flex; flex-direction:column; }
+.topbar { height:var(--topbar-h); background:var(--white); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 24px; gap:16px; position:sticky; top:0; z-index:100; }
+.topbar-hamburger { display:none; background:none; padding:6px; color:var(--navy); font-size:20px; border-radius:6px; border:none; cursor:pointer; }
+.topbar-title { flex:1; }
+.topbar-title h2 { font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--navy); }
+.topbar-title p  { font-size:12px; color:var(--text-muted); }
+.topbar-actions { display:flex; align-items:center; gap:8px; }
+.topbar-btn { background:none; border:1px solid var(--border); border-radius:8px; padding:7px 14px; font-size:13px; color:var(--text); display:flex; align-items:center; gap:6px; transition:var(--transition); cursor:pointer; }
+.topbar-btn:hover { background:var(--bg); border-color:var(--navy); }
+.topbar-btn.gold { background:var(--gold); color:var(--navy-dark); border-color:var(--gold); font-weight:600; }
+.topbar-btn.gold:hover { background:var(--gold-light); }
+.page-content { flex:1; padding:24px; overflow-y:auto; }
+
+/* ── COMPONENTES ── */
+.card { background:var(--bg-card); border-radius:var(--radius); border:1px solid var(--border); padding:20px; box-shadow:var(--shadow); }
+.card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.card-title    { font-size:16px; font-weight:600; color:var(--navy); }
+.card-subtitle { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:24px; }
+.kpi-card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); position:relative; overflow:hidden; transition:var(--transition); }
+.kpi-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--gold); }
+.kpi-card.danger::before  { background:var(--danger); }
+.kpi-card.warning::before { background:var(--warning); }
+.kpi-card.info::before    { background:var(--info); }
+.kpi-card.success::before { background:var(--success); }
+.kpi-icon  { width:44px; height:44px; background:var(--bg); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; margin-bottom:14px; }
+.kpi-value { font-family:'Cormorant Garamond',serif; font-size:36px; font-weight:700; color:var(--navy); line-height:1; }
+.kpi-label { font-size:12px; color:var(--text-muted); margin-top:6px; text-transform:uppercase; letter-spacing:0.5px; }
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+.table-wrap { overflow-x:auto; border-radius:var(--radius); }
+table { width:100%; border-collapse:collapse; font-size:13.5px; }
+thead tr { background:var(--navy); }
+thead th { padding:11px 14px; text-align:left; color:var(--gold); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
+tbody tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
+tbody tr:hover { background:var(--bg); }
+tbody td { padding:10px 14px; color:var(--text); vertical-align:middle; }
+.table-empty { text-align:center; padding:40px; color:var(--text-muted); }
+.badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:600; letter-spacing:0.3px; }
+.badge-success { background:#dcfce7; color:#166534; }
+.badge-warning { background:#fef3c7; color:#92400e; }
+.badge-danger  { background:#fee2e2; color:#991b1b; }
+.badge-info    { background:#dbeafe; color:#1e40af; }
+.badge-gray    { background:#f3f4f6; color:#374151; }
+.badge-navy    { background:rgba(27,42,74,0.1); color:var(--navy); }
+.stock-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600; }
+.stock-ok      { background:#dcfce7; color:#166534; }
+.stock-min     { background:#fef3c7; color:#92400e; }
+.stock-crit    { background:#fee2e2; color:#991b1b; }
+.stock-agotado { background:#f3f4f6; color:#374151; }
+.stock-dot { width:7px; height:7px; border-radius:50%; }
+.stock-ok .stock-dot      { background:#22c55e; }
+.stock-min .stock-dot     { background:#eab308; }
+.stock-crit .stock-dot    { background:#ef4444; animation:pulse 1.5s infinite; }
+.stock-agotado .stock-dot { background:#9ca3af; }
+.form-grid   { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.form-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+.form-full   { grid-column:1/-1; }
+.form-group  { display:flex; flex-direction:column; gap:5px; }
+.form-group label { font-size:12px; font-weight:500; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.4px; }
+.form-group label span.req { color:var(--danger); margin-left:2px; }
+.form-control { border:1px solid var(--border); border-radius:7px; padding:9px 13px; font-size:14px; color:var(--text); background:var(--white); transition:var(--transition); outline:none; width:100%; }
+.form-control:focus    { border-color:var(--navy); box-shadow:0 0 0 3px rgba(27,42,74,0.08); }
+.form-control:disabled { background:var(--bg); color:var(--text-muted); }
+select.form-control { cursor:pointer; }
+textarea.form-control { resize:vertical; min-height:80px; }
+.form-hint  { font-size:11px; color:var(--text-light); margin-top:2px; }
+.otro-field { display:none; flex-direction:column; gap:5px; }
+.otro-field.visible { display:flex; animation:slideDown 0.25s ease; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:9px 18px; border-radius:7px; font-size:13.5px; font-weight:500; transition:var(--transition); border:none; cursor:pointer; }
+.btn-primary { background:var(--navy);    color:white; }
+.btn-primary:hover { background:var(--navy-mid); }
+.btn-gold    { background:var(--gold);    color:var(--navy-dark); font-weight:700; }
+.btn-gold:hover    { background:var(--gold-light); }
+.btn-outline { background:transparent;   color:var(--navy); border:1px solid var(--border); }
+.btn-outline:hover { background:var(--bg); }
+.btn-danger  { background:var(--danger);  color:white; }
+.btn-danger:hover  { background:#b91c1c; }
+.btn-success { background:var(--success); color:white; }
+.btn-success:hover { background:#15803d; }
+.btn-sm   { padding:5px 11px; font-size:12px; }
+.btn-icon { padding:7px; border-radius:6px; }
+.btn:disabled { opacity:0.5; cursor:not-allowed; }
+.filters-bar { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; align-items:center; }
+.filter-input { border:1px solid var(--border); border-radius:7px; padding:8px 13px; font-size:13px; background:white; outline:none; transition:var(--transition); }
+.filter-input:focus { border-color:var(--navy); }
+.filter-input.wide { min-width:220px; }
+.modal-overlay { position:fixed; inset:0; background:rgba(11,18,32,0.65); backdrop-filter:blur(4px); z-index:1000; display:none; align-items:center; justify-content:center; padding:16px; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--white); border-radius:14px; width:100%; max-width:560px; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow-lg); animation:scaleIn 0.25s ease; }
+.modal-lg { max-width:740px; }
+.modal-header { padding:22px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:white; z-index:1; border-radius:14px 14px 0 0; }
+.modal-header h3 { font-size:19px; color:var(--navy); }
+.modal-close { width:32px; height:32px; background:var(--bg); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:16px; color:var(--text-muted); transition:var(--transition); border:none; cursor:pointer; }
+.modal-close:hover { background:#fee2e2; color:var(--danger); }
+.modal-body   { padding:22px 24px; }
+.modal-footer { padding:16px 24px 22px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; }
+.toast-container { position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+.toast { background:var(--navy-dark); color:white; padding:12px 18px; border-radius:8px; font-size:13.5px; display:flex; align-items:center; gap:10px; box-shadow:0 4px 20px rgba(0,0,0,0.25); pointer-events:all; animation:slideLeft 0.3s ease; max-width:320px; border-left:4px solid var(--gold); }
+.toast.success { border-color:var(--success); }
+.toast.error   { border-color:var(--danger); background:#450a0a; }
+.toast.warning { border-color:var(--warning); }
+.spinner { width:20px; height:20px; border:2px solid rgba(255,255,255,0.2); border-top-color:white; border-radius:50%; animation:spin 0.7s linear infinite; flex-shrink:0; display:inline-block; }
+.spinner-dark { border-color:rgba(27,42,74,0.2); border-top-color:var(--navy); }
+.loading-overlay { display:flex; align-items:center; justify-content:center; padding:60px; gap:12px; color:var(--text-muted); }
+.alert-item { background:white; border:1px solid var(--border); border-radius:8px; padding:14px 16px; display:flex; gap:14px; align-items:flex-start; margin-bottom:8px; }
+.alert-item.unread     { border-left:3px solid var(--danger); }
+.alert-item.warn-orange{ border-left:3px solid var(--warning); }
+.alert-icon    { font-size:22px; flex-shrink:0; }
+.alert-content { flex:1; }
+.alert-title   { font-size:14px; font-weight:600; color:var(--navy); }
+.alert-detail  { font-size:12px; color:var(--text-muted); margin-top:3px; }
+.alert-date    { font-size:11px; color:var(--text-light); margin-top:4px; }
+.tabs { display:flex; gap:2px; background:var(--bg); border-radius:8px; padding:3px; margin-bottom:20px; }
+.tab-btn { flex:1; padding:8px 14px; border-radius:6px; font-size:13px; font-weight:500; color:var(--text-muted); background:transparent; transition:var(--transition); text-align:center; border:none; cursor:pointer; }
+.tab-btn.active { background:white; color:var(--navy); box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+.quick-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; }
+.quick-card { background:white; border:1px solid var(--border); border-radius:10px; padding:16px 12px; text-align:center; cursor:pointer; transition:var(--transition); }
+.quick-card:hover { border-color:var(--navy); background:var(--bg); transform:translateY(-2px); }
+.quick-card-icon  { font-size:24px; margin-bottom:7px; }
+.quick-card-label { font-size:11px; font-weight:600; color:var(--navy); line-height:1.3; }
+.row-vencido { background:#fff1f1!important; }
+.row-vencido:hover { background:#ffe4e4!important; }
+
+@keyframes fadeUp   { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeIn   { from{opacity:0} to{opacity:1} }
+@keyframes scaleIn  { from{opacity:0;transform:scale(0.93)} to{opacity:1;transform:scale(1)} }
+@keyframes slideLeft{ from{opacity:0;transform:translateX(30px)} to{opacity:1;transform:translateX(0)} }
+@keyframes slideDown{ from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes spin     { to{transform:rotate(360deg)} }
+@keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+@media(max-width:768px){
+  :root{ --sidebar-w:0px; }
+  .sidebar { transform:translateX(-260px); width:260px; }
+  .sidebar.open { transform:translateX(0); }
+  .main-content { margin-left:0; }
+  .topbar-hamburger { display:flex; }
+  .kpi-grid { grid-template-columns:1fr 1fr; }
+  .grid-2,.grid-3 { grid-template-columns:1fr; }
+  .form-grid,.form-grid-3 { grid-template-columns:1fr; }
+  .page-content { padding:14px; }
+  .filters-bar { flex-direction:column; align-items:stretch; }
+  .filter-input { width:100%; }
+  thead { display:none; }
+  tbody tr { display:block; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; padding:10px; }
+  tbody td { display:flex; justify-content:space-between; padding:6px 0; border:none; font-size:13px; }
+  tbody td::before { content:attr(data-label); font-weight:600; color:var(--text-muted); font-size:11px; text-transform:uppercase; }
+  .topbar-actions .topbar-btn span { display:none; }
+  .modal { max-width:100%; }
+  .modal-footer { flex-direction:column-reverse; }
+  .toast-container { bottom:80px; right:12px; left:12px; }
+  .toast { max-width:100%; }
+  .sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:199; }
+  .sidebar-overlay.open { display:block; }
+}
+@media(max-width:480px){
+  .kpi-grid { grid-template-columns:1fr; }
+  .quick-grid { grid-template-columns:repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN ===== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">🏪</div>
+      <h1>Sistema de Pañol</h1>
+      <p>Subsecretaría de Infraestructura · UNSL</p>
+    </div>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-field"><label>Usuario</label><input type="text" id="login-user" placeholder="usuario" autocomplete="username"></div>
+    <div class="login-field"><label>Contraseña</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()"><span id="login-btn-text">Ingresar al Sistema</span></button>
+    <div class="login-roles">
+      <p>Acceso rápido demo</p>
+      <div class="login-role-pills">
+        <div class="role-pill" onclick="quickLogin('admin','Admin2024!')">👑 Admin</div>
+        <div class="role-pill" onclick="quickLogin('encargado','Panol2024!')">🔑 Encargado</div>
+        <div class="role-pill" onclick="quickLogin('supervisor','Super2024!')">👁️ Supervisor</div>
+        <div class="role-pill" onclick="quickLogin('consulta','Consul2024')">🔍 Consulta</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app">
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">🏪</div>
+        <div class="sidebar-brand-text"><h2>Pañol</h2><p>Infraestructura · UNSL</p></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="sidebar-user-avatar" id="user-avatar">👤</div>
+      <div class="sidebar-user-info"><p id="user-name">-</p><p id="user-role-label">-</p></div>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <div class="sidebar-logout"><button class="logout-btn" onclick="doLogout()"><span>🚪</span> Cerrar Sesión</button></div>
+  </aside>
+  <div class="main-content">
+    <div class="topbar">
+      <button class="topbar-hamburger" onclick="toggleSidebar()">☰</button>
+      <div class="topbar-title"><h2 id="page-title">Dashboard</h2><p id="page-subtitle">Resumen general del sistema</p></div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+    <div class="page-content" id="page-content"></div>
+  </div>
+</div>
+
+<!-- ===== TOASTS ===== -->
+<div class="toast-container" id="toasts"></div>
+
+<!-- ===== MODAL ===== -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalIfOverlay(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-header"><h3 id="modal-title">Modal</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// CONFIG — REEMPLAZAR CON URL DEL DEPLOY DE GOOGLE APPS SCRIPT
+// ================================================================
+const API_URL = 'REEMPLAZAR_CON_URL_GAS';
+
+// ================================================================
+// ESTADO GLOBAL
+// ================================================================
+let currentUser = null;
+let currentPage = null;
+let alertCount  = 0;
+let appData     = { categorias:[], personal:[], proveedores:[], articulos:[] };
+
+const ROLES = {
+  admin:     { label:'Administrador',      emoji:'👑' },
+  encargado: { label:'Encargado de Pañol', emoji:'🔑' },
+  supervisor:{ label:'Supervisor',         emoji:'👁️' },
+  consulta:  { label:'Consulta',           emoji:'🔍' }
+};
+
+const MENU = [
+  { section:'Operaciones', items:[
+    { id:'dashboard',         icon:'📊', label:'Dashboard',            roles:['admin','encargado','supervisor','consulta'] },
+    { id:'movimiento-rapido', icon:'⚡', label:'Movimiento Rápido',    roles:['admin','encargado'] },
+    { id:'catalogo',          icon:'📦', label:'Catálogo',             roles:['admin','encargado','supervisor','consulta'] },
+    { id:'prestamos',         icon:'🔑', label:'Préstamos Activos',    roles:['admin','encargado','supervisor'] },
+  ]},
+  { section:'Inventario', items:[
+    { id:'entregas',          icon:'📤', label:'Registrar Entrega',    roles:['admin','encargado'] },
+    { id:'nuevo-prestamo',    icon:'📋', label:'Registrar Préstamo',   roles:['admin','encargado'] },
+    { id:'devolucion',        icon:'📥', label:'Registrar Devolución', roles:['admin','encargado'] },
+    { id:'ingreso-stock',     icon:'📨', label:'Ingreso de Stock',     roles:['admin','encargado'] },
+    { id:'historial',         icon:'📜', label:'Historial',            roles:['admin','encargado','supervisor'] },
+  ]},
+  { section:'Gestión', items:[
+    { id:'alertas',  icon:'🔔', label:'Alertas',  roles:['admin','encargado','supervisor'], badge:true },
+    { id:'reportes', icon:'📈', label:'Reportes', roles:['admin','encargado','supervisor'] },
+  ]},
+  { section:'Administración', items:[
+    { id:'personal',      icon:'👥', label:'Personal',             roles:['admin','encargado'] },
+    { id:'categorias',    icon:'🏷️', label:'Categorías',           roles:['admin'] },
+    { id:'proveedores',   icon:'🏭', label:'Proveedores',          roles:['admin','encargado'] },
+    { id:'usuarios',      icon:'🔐', label:'Usuarios del Sistema', roles:['admin'] },
+    { id:'configuracion', icon:'⚙️', label:'Configuración',        roles:['admin'] },
+    { id:'auditoria',     icon:'🔍', label:'Auditoría',            roles:['admin'] },
+  ]}
+];
+
+// ================================================================
+// API
+// ================================================================
+async function api(action, data={}) {
+  try {
+    const res = await fetch(API_URL, {
+      method:'POST',
+      body: new URLSearchParams({ action, data: JSON.stringify(data) }),
+      redirect:'follow'
+    });
+    return await res.json();
+  } catch(e) { return { success:false, error:'Error de conexión: '+e.message }; }
+}
+
+// ================================================================
+// AUTH
+// ================================================================
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  if (!username || !password) { showLoginError('Ingresá usuario y contraseña'); return; }
+  btn.disabled = true;
+  document.getElementById('login-btn-text').innerHTML = '<div class="spinner"></div>';
+  errEl.style.display = 'none';
+  const res = await api('login', { username, password });
+  btn.disabled = false;
+  document.getElementById('login-btn-text').textContent = 'Ingresar al Sistema';
+  if (res.success) {
+    currentUser = res.user;
+    sessionStorage.setItem('panol_user', JSON.stringify(res.user));
+    initApp();
+  } else showLoginError(res.error || 'Credenciales incorrectas');
+}
+function showLoginError(msg) { const el=document.getElementById('login-error'); el.textContent=msg; el.style.display='block'; }
+function quickLogin(u,p) { document.getElementById('login-user').value=u; document.getElementById('login-pass').value=p; doLogin(); }
+function doLogout() {
+  if (!confirm('¿Cerrar sesión?')) return;
+  currentUser=null; sessionStorage.removeItem('panol_user');
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-user').value='';
+  document.getElementById('login-pass').value='';
+}
+
+// ================================================================
+// INIT APP
+// ================================================================
+async function initApp() {
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  const info = ROLES[currentUser.rol] || { label:currentUser.rol, emoji:'👤' };
+  document.getElementById('user-name').textContent      = currentUser.nombre;
+  document.getElementById('user-role-label').textContent = info.label;
+  document.getElementById('user-avatar').textContent    = info.emoji;
+  buildMenu();
+  await loadBaseData();
+  await loadAlertCount();
+  navigateTo('dashboard');
+}
+function buildMenu() {
+  const nav = document.getElementById('sidebar-nav'); nav.innerHTML='';
+  MENU.forEach(section => {
+    const items = section.items.filter(i => i.roles.includes(currentUser.rol));
+    if (!items.length) return;
+    const sec = document.createElement('div'); sec.className='nav-section'; sec.textContent=section.section; nav.appendChild(sec);
+    items.forEach(item => {
+      const el = document.createElement('div'); el.className='nav-item'; el.dataset.page=item.id;
+      el.innerHTML = `<span class="nav-icon">${item.icon}</span><span>${item.label}</span>`;
+      if (item.badge) el.innerHTML += `<span class="nav-badge" id="badge-alertas" style="display:none">0</span>`;
+      el.onclick = () => { navigateTo(item.id); closeSidebar(); };
+      nav.appendChild(el);
+    });
+  });
+}
+async function loadBaseData() {
+  const [c,p,pv] = await Promise.all([
+    api('getCategorias',{soloActivas:true}),
+    api('getPersonal',  {soloActivos:true}),
+    api('getProveedores')
+  ]);
+  if (c.success)  appData.categorias  = c.categorias;
+  if (p.success)  appData.personal    = p.personal;
+  if (pv.success) appData.proveedores = pv.proveedores.filter(x=>x.activo);
+}
+async function loadAlertCount() {
+  const res = await api('getAlertas', { soloNoLeidas:true });
+  if (res.success) {
+    alertCount = res.alertas.length;
+    const b = document.getElementById('badge-alertas');
+    if (b) { b.textContent=alertCount; b.style.display=alertCount>0?'inline-block':'none'; }
+  }
+}
+
+// ================================================================
+// NAVEGACIÓN
+// ================================================================
+const PAGE_META = {
+  'dashboard':         {title:'Dashboard',              subtitle:'Resumen en tiempo real'},
+  'movimiento-rapido': {title:'Movimiento Rápido',       subtitle:'Registrá una operación en segundos'},
+  'catalogo':          {title:'Catálogo de Artículos',   subtitle:'Inventario completo'},
+  'prestamos':         {title:'Préstamos Activos',       subtitle:'Herramientas en circulación'},
+  'entregas':          {title:'Registrar Entrega',       subtitle:'Entrega de consumibles'},
+  'nuevo-prestamo':    {title:'Registrar Préstamo',      subtitle:'Préstamo de reutilizables'},
+  'devolucion':        {title:'Registrar Devolución',    subtitle:'Devolución de herramientas'},
+  'ingreso-stock':     {title:'Ingreso de Stock',        subtitle:'Recepción de materiales'},
+  'historial':         {title:'Historial',               subtitle:'Registro completo de operaciones'},
+  'alertas':           {title:'Alertas',                 subtitle:'Notificaciones del sistema'},
+  'reportes':          {title:'Reportes',                subtitle:'Exportá datos e informes'},
+  'personal':          {title:'Personal',                subtitle:'Gestión de destinatarios'},
+  'categorias':        {title:'Categorías',              subtitle:'Organización del inventario'},
+  'proveedores':       {title:'Proveedores',             subtitle:'Registro de proveedores'},
+  'usuarios':          {title:'Usuarios del Sistema',    subtitle:'Accesos y roles'},
+  'configuracion':     {title:'Configuración',           subtitle:'Parámetros del sistema'},
+  'auditoria':         {title:'Auditoría',               subtitle:'Log de acciones críticas'},
+};
+function navigateTo(pageId) {
+  currentPage=pageId;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active', el.dataset.page===pageId));
+  const m = PAGE_META[pageId] || {title:pageId,subtitle:''};
+  document.getElementById('page-title').textContent    = m.title;
+  document.getElementById('page-subtitle').textContent = m.subtitle;
+  document.getElementById('page-content').innerHTML    = `<div class="loading-overlay"><div class="spinner spinner-dark"></div><span>Cargando...</span></div>`;
+  document.getElementById('topbar-actions').innerHTML  = '';
+  const pages = {
+    'dashboard':renderDashboard, 'movimiento-rapido':renderMovimientoRapido,
+    'catalogo':renderCatalogo,   'prestamos':renderPrestamos,
+    'entregas':renderEntregas,   'nuevo-prestamo':renderNuevoPrestamo,
+    'devolucion':renderDevolucion,'ingreso-stock':renderIngresoStock,
+    'historial':renderHistorial, 'alertas':renderAlertas,
+    'reportes':renderReportes,   'personal':renderPersonal,
+    'categorias':renderCategorias,'proveedores':renderProveedores,
+    'usuarios':renderUsuarios,   'configuracion':renderConfiguracion,
+    'auditoria':renderAuditoria
+  };
+  if (pages[pageId]) pages[pageId]();
+  else document.getElementById('page-content').innerHTML='<div class="card"><p>Página no disponible</p></div>';
+}
+
+// ================================================================
+// DASHBOARD
+// ================================================================
+async function renderDashboard() {
+  const res = await api('getDashboard');
+  if (!res.success) { showPage('<div class="card"><p>Error cargando dashboard</p></div>'); return; }
+  const k=res.kpis; const movs=res.ultimosMovimientos||[]; const movCat=res.movimientosPorCategoria||{};
+  const TM = {
+    ingreso:      {l:'Ingreso',      c:'#22c55e', i:'📨'},
+    entrega:      {l:'Entrega',      c:'#3b82f6', i:'📤'},
+    prestamo:     {l:'Préstamo',     c:'#8b5cf6', i:'📋'},
+    devolucion:   {l:'Devolución',   c:'#06b6d4', i:'📥'},
+    cambio_estado:{l:'Cambio Estado',c:'#f59e0b', i:'🔄'}
+  };
+  const movRows = movs.map(m=>{
+    const t=TM[m.tipo]||{l:m.tipo,c:'#9ca3af',i:'📌'};
+    return `<tr>
+      <td data-label="Fecha">${formatDate(m.fecha)}</td>
+      <td data-label="Tipo"><span class="badge" style="background:${t.c}20;color:${t.c}">${t.i} ${t.l}</span></td>
+      <td data-label="Artículo"><strong>${m.articuloNombre}</strong></td>
+      <td data-label="Destinatario">${m.destinatario}</td>
+      <td data-label="Cantidad">${m.cantidad||'-'}</td>
+      <td data-label="Usuario">${m.usuario}</td></tr>`;
+  }).join('') || `<tr><td colspan="6" class="table-empty">Sin movimientos recientes</td></tr>`;
+  const cats = Object.entries(movCat).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxV = cats.length ? Math.max(...cats.map(c=>c[1])) : 1;
+  let chart = '<div style="display:flex;align-items:flex-end;gap:8px;height:100px;padding-top:10px;">';
+  cats.forEach(([cat,val])=>{
+    const h=Math.round((val/maxV)*80);
+    chart+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <span style="font-size:10px;color:var(--text-muted)">${val}</span>
+      <div style="width:100%;height:${h}px;background:linear-gradient(180deg,var(--gold),var(--gold-dark));border-radius:4px 4px 0 0;"></div>
+      <span style="font-size:9px;color:var(--text-muted);text-align:center;line-height:1.2">${cat.split(' ')[0]}</span></div>`;
+  });
+  chart += '</div>';
+  if (!cats.length) chart='<p style="color:var(--text-muted);font-size:13px;text-align:center;padding:30px">Sin movimientos este mes</p>';
+  showPage(`
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-icon">📦</div><div class="kpi-value">${k.totalArticulos}</div><div class="kpi-label">Artículos en Catálogo</div></div>
+      <div class="kpi-card ${k.stockCritico>0?'danger':'success'}"><div class="kpi-icon">${k.stockCritico>0?'⚠️':'✅'}</div><div class="kpi-value">${k.stockCritico}</div><div class="kpi-label">Stock Crítico / Bajo</div></div>
+      <div class="kpi-card info"><div class="kpi-icon">🔑</div><div class="kpi-value">${k.prestamosActivos}</div><div class="kpi-label">Préstamos Activos</div></div>
+      <div class="kpi-card ${k.prestamosVencidos>0?'danger':''}"><div class="kpi-icon">📅</div><div class="kpi-value">${k.prestamosVencidos}</div><div class="kpi-label">Préstamos Vencidos</div></div>
+      <div class="kpi-card ${k.alertasPendientes>0?'warning':''}"><div class="kpi-icon">🔔</div><div class="kpi-value">${k.alertasPendientes}</div><div class="kpi-label">Alertas Pendientes</div></div>
+    </div>
+    <div class="grid-2" style="margin-bottom:24px">
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">Movimientos del Mes</div><div class="card-subtitle">Por categoría</div></div></div>
+        ${chart}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Acciones Rápidas</div></div>
+        <div class="quick-grid">
+          ${hasPermission(['admin','encargado'])?`
+          <div class="quick-card" onclick="navigateTo('movimiento-rapido')"><div class="quick-card-icon">⚡</div><div class="quick-card-label">Mov. Rápido</div></div>
+          <div class="quick-card" onclick="navigateTo('entregas')"><div class="quick-card-icon">📤</div><div class="quick-card-label">Entrega</div></div>
+          <div class="quick-card" onclick="navigateTo('nuevo-prestamo')"><div class="quick-card-icon">📋</div><div class="quick-card-label">Préstamo</div></div>
+          <div class="quick-card" onclick="navigateTo('devolucion')"><div class="quick-card-icon">📥</div><div class="quick-card-label">Devolución</div></div>
+          <div class="quick-card" onclick="navigateTo('ingreso-stock')"><div class="quick-card-icon">📨</div><div class="quick-card-label">Ingreso Stock</div></div>`:''}
+          <div class="quick-card" onclick="navigateTo('catalogo')"><div class="quick-card-icon">📦</div><div class="quick-card-label">Catálogo</div></div>
+          <div class="quick-card" onclick="navigateTo('prestamos')"><div class="quick-card-icon">🔑</div><div class="quick-card-label">Préstamos</div></div>
+          <div class="quick-card" onclick="navigateTo('alertas')"><div class="quick-card-icon">🔔</div><div class="quick-card-label">Alertas</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Últimos 8 Movimientos</div><button class="btn btn-outline btn-sm" onclick="navigateTo('historial')">Ver historial →</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Artículo</th><th>Destinatario</th><th>Cant.</th><th>Usuario</th></tr></thead>
+        <tbody>${movRows}</tbody>
+      </table></div>
+    </div>`);
+}
+
+// ================================================================
+// MOVIMIENTO RÁPIDO
+// ================================================================
+function renderMovimientoRapido() {
+  showPage(`<div style="max-width:560px;margin:0 auto"><div class="card">
+    <div class="card-header"><div class="card-title">⚡ Movimiento Rápido</div></div>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px">Registrá cualquier operación en menos de 10 segundos.</p>
+    <div class="tabs" id="mr-tabs">
+      <button class="tab-btn active" onclick="setMRTab('entrega',this)">📤 Entrega</button>
+      <button class="tab-btn" onclick="setMRTab('prestamo',this)">📋 Préstamo</button>
+      <button class="tab-btn" onclick="setMRTab('ingreso',this)">📨 Ingreso</button>
+    </div>
+    <div id="mr-form"></div>
+  </div></div>`);
+  if (!appData.articulos.length) loadArticulosCache().then(()=>setMRTab('entrega',null));
+  else setMRTab('entrega', document.querySelector('#mr-tabs .tab-btn'));
+}
+let mrTab='entrega';
+function setMRTab(tipo, btn) {
+  mrTab=tipo;
+  document.querySelectorAll('#mr-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const artsF = appData.articulos.filter(a=> tipo==='entrega'?a.tipo==='consumible': tipo==='prestamo'?a.tipo==='reutilizable':true);
+  let ao=`<option value="">— Seleccioná artículo —</option>`;
+  artsF.forEach(a=>{ const ex=a.tipo==='consumible'?` (Stock:${a.stock})`:`(${a.estado})`; ao+=`<option value="${a.id}">${a.nombre} ${ex}</option>`; });
+  const df = tipo!=='ingreso' ? `
+    <div class="form-group"><label>Destinatario <span class="req">*</span></label>
+      <select class="form-control" id="mr-dest" onchange="handleOtro(this,'mr-otro-wrap')">
+        <option value="">— Seleccioná persona —</option>
+        ${appData.personal.map(p=>`<option value="${p.nombre} ${p.apellido}">${p.nombre} ${p.apellido} — ${p.cargo}</option>`).join('')}
+        <option value="__otro__">➕ Otro (persona externa)</option>
+      </select></div>
+    <div class="otro-field" id="mr-otro-wrap">
+      <label style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px">Nombre completo <span class="req">*</span></label>
+      <input type="text" class="form-control" id="mr-otro" placeholder="Ej: Ing. Paula Ramírez">
+    </div>` : `
+    <div class="form-group"><label>Proveedor</label>
+      <select class="form-control" id="mr-prov"><option value="">— Sin proveedor —</option>${appData.proveedores.map(p=>`<option value="${p.nombre}">${p.nombre}</option>`).join('')}</select></div>
+    <div class="form-group"><label>Remito</label><input type="text" class="form-control" id="mr-remito" placeholder="REM-0042"></div>`;
+  const cf = tipo!=='prestamo' ? `
+    <div class="form-group"><label>Cantidad <span class="req">*</span></label><input type="number" class="form-control" id="mr-cant" min="1" value="1"></div>` : `
+    <div class="form-group"><label>Fecha Devolución</label><input type="date" class="form-control" id="mr-fecha-dev" value="${getFutureDate(3)}"></div>
+    <div class="form-group"><label>Propósito</label><input type="text" class="form-control" id="mr-proposito" placeholder="Ej: Reparación Edificio B"></div>`;
+  document.getElementById('mr-form').innerHTML=`
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Artículo <span class="req">*</span></label><select class="form-control" id="mr-art">${ao}</select></div>
+      ${df}${cf}
+      <div class="form-group form-full"><label>Observaciones</label><input type="text" class="form-control" id="mr-obs" placeholder="Opcional"></div>
+    </div>
+    <div style="margin-top:20px"><button class="btn btn-gold" style="width:100%;padding:14px" onclick="submitMR()">✓ Confirmar ${tipo==='entrega'?'Entrega':tipo==='prestamo'?'Préstamo':'Ingreso'}</button></div>`;
+}
+async function loadArticulosCache() { const res=await api('getArticulos',{filtro:{activo:true}}); if(res.success) appData.articulos=res.articulos; }
+async function submitMR() {
+  const tipo=mrTab; const artId=document.getElementById('mr-art')?.value; const obs=document.getElementById('mr-obs')?.value;
+  if (!artId) { toast('Seleccioná un artículo','error'); return; }
+  let destValue='';
+  if (tipo!=='ingreso') {
+    const ds=document.getElementById('mr-dest')?.value;
+    if (ds==='__otro__') { const otro=document.getElementById('mr-otro')?.value.trim(); if(!otro){toast('Ingresá el nombre del destinatario','error');return;} destValue='Otro: '+otro; }
+    else destValue=ds;
+    if (!destValue) { toast('Seleccioná un destinatario','error'); return; }
+  }
+  const art=appData.articulos.find(a=>a.id===artId);
+  const data={tipo,articuloId:artId,articuloNombre:art?.nombre||artId,categoria:art?.categoria||'',usuario:currentUser.username,observaciones:obs};
+  if (tipo==='prestamo')     { data.destinatario=destValue; data.fechaDevolucionEsperada=document.getElementById('mr-fecha-dev')?.value; data.proposito=document.getElementById('mr-proposito')?.value; data.cantidad=1; }
+  else if (tipo==='entrega') { data.destinatario=destValue; data.cantidad=parseInt(document.getElementById('mr-cant')?.value)||1; }
+  else { data.destinatario='Ingreso de stock'; data.cantidad=parseInt(document.getElementById('mr-cant')?.value)||1; data.proveedor=document.getElementById('mr-prov')?.value; data.remito=document.getElementById('mr-remito')?.value; }
+  const btn=document.querySelector('#mr-form .btn-gold');
+  btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Registrando...';
+  const res=await api('saveMovimiento',data);
+  btn.disabled=false; btn.textContent='✓ Confirmar';
+  if (res.success) { toast(res.message||'Operación registrada','success'); await loadArticulosCache(); setMRTab(tipo,null); await loadAlertCount(); }
+  else toast(res.error||'Error al registrar','error');
+}
+
+// ================================================================
+// CATÁLOGO
+// ================================================================
+async function renderCatalogo() {
+  setTopbarActions(hasPermission(['admin','encargado'])?'<button class="topbar-btn gold" onclick="openModalNuevoArticulo()">+ Nuevo Artículo</button>':'');
+  const res=await api('getArticulos',{filtro:{}});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  appData.articulos=res.articulos;
+  const catOpts=[...new Set(res.articulos.map(a=>a.categoria))].map(c=>`<option value="${c}">${c}</option>`).join('');
+  const rows=res.articulos.map(a=>`<tr>
+    <td data-label="Nombre"><strong>${a.nombre}</strong><br><span style="font-size:11px;color:var(--text-muted)">${a.descripcion||''}</span></td>
+    <td data-label="Categoría"><span class="badge badge-navy">${a.categoria}</span></td>
+    <td data-label="Tipo">${a.tipo==='consumible'?'<span class="badge badge-info">Consumible</span>':'<span class="badge badge-gray">Reutilizable</span>'}</td>
+    <td data-label="Stock/Estado">${a.tipo==='consumible'?getStockBadge(a.stock,a.stockMinimo):getEstadoBadge(a.estado)}</td>
+    <td data-label="Ubicación">${a.ubicacion||'—'}</td>
+    <td data-label="Nro Pat.">${a.nroPatrimonial||'—'}</td>
+    <td data-label="Acciones">${hasPermission(['admin','encargado'])?`<div style="display:flex;gap:4px">
+      <button class="btn btn-outline btn-sm btn-icon" onclick="openModalEditarArticulo('${a.id}')" title="Editar">✏️</button>
+      <button class="btn btn-outline btn-sm btn-icon" onclick="openModalCambiarEstado('${a.id}','${escHtml(a.nombre)}')" title="Estado">🔄</button>
+    </div>`:''}</td>
+  </tr>`).join('')||`<tr><td colspan="7" class="table-empty">Sin artículos registrados</td></tr>`;
+  showPage(`
+    <div class="filters-bar">
+      <input type="text" class="filter-input wide" id="f-buscar" placeholder="🔍 Buscar por nombre, descripción o patrimonio..." oninput="filtrarCatalogo()">
+      <select class="filter-input" id="f-tipo" onchange="filtrarCatalogo()"><option value="">Todos los tipos</option><option value="consumible">Consumibles</option><option value="reutilizable">Reutilizables</option></select>
+      <select class="filter-input" id="f-cat" onchange="filtrarCatalogo()"><option value="">Todas las categorías</option>${catOpts}</select>
+      <select class="filter-input" id="f-estado" onchange="filtrarCatalogo()"><option value="">Todos los estados</option><option value="disponible">Disponible</option><option value="prestado">Prestado</option><option value="en_reparacion">En reparación</option><option value="fuera_servicio">Fuera de servicio</option><option value="extraviado">Extraviado</option></select>
+    </div>
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>Nombre</th><th>Categoría</th><th>Tipo</th><th>Stock/Estado</th><th>Ubicación</th><th>Nro Pat.</th><th>Acciones</th></tr></thead>
+      <tbody id="catalogo-body">${rows}</tbody>
+    </table></div></div>`);
+}
+function filtrarCatalogo() {
+  const b=document.getElementById('f-buscar').value.toLowerCase();
+  const t=document.getElementById('f-tipo').value;
+  const c=document.getElementById('f-cat').value;
+  const e=document.getElementById('f-estado').value;
+  document.querySelectorAll('#catalogo-body tr').forEach(tr=>{
+    tr.style.display=(!b||tr.textContent.toLowerCase().includes(b))&&(!t||tr.innerHTML.includes(t))&&(!c||tr.innerHTML.includes(c))&&(!e||tr.innerHTML.includes(e))?'':'none';
+  });
+}
+
+// ================================================================
+// PRÉSTAMOS ACTIVOS
+// ================================================================
+async function renderPrestamos() {
+  const res=await api('getPrestamosActivos',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const rows=res.prestamos.map(p=>`<tr class="${p.vencido?'row-vencido':''}">
+    <td data-label="Artículo"><strong>${p.articuloNombre}</strong></td>
+    <td data-label="Destinatario">${p.destinatario}</td>
+    <td data-label="Desde">${formatDate(p.fechaInicio)}</td>
+    <td data-label="Dev.Esperada">${p.fechaDevolucionEsperada||'—'}</td>
+    <td data-label="Duración">${p.vencido?`<span class="badge badge-danger">⚠ ${p.diasTranscurridos}d VENCIDO</span>`:`<span class="badge badge-info">${p.diasTranscurridos}d</span>`}</td>
+    <td data-label="Propósito">${p.proposito||'—'}</td>
+    <td data-label="Acciones">${hasPermission(['admin','encargado'])?`<button class="btn btn-success btn-sm" onclick="openModalDevolucion('${p.id}','${escHtml(p.articuloNombre)}','${escHtml(p.destinatario)}')">📥 Devolver</button>`:''}</td>
+  </tr>`).join('')||`<tr><td colspan="7" class="table-empty">🎉 No hay préstamos activos</td></tr>`;
+  showPage(`<div class="card">
+    <div class="card-header"><div><div class="card-title">Préstamos Activos (${res.prestamos.length})</div><div class="card-subtitle">🔴 Los vencidos se resaltan en rojo</div></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Artículo</th><th>Destinatario</th><th>Desde</th><th>Dev.Esperada</th><th>Duración</th><th>Propósito</th><th>Acciones</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`);
+}
+function openModalDevolucion(prestamoId, artNombre, destinatario) {
+  openModal('Registrar Devolución',`
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Artículo</label><input type="text" class="form-control" value="${artNombre}" disabled></div>
+      <div class="form-group form-full"><label>Destinatario</label><input type="text" class="form-control" value="${destinatario}" disabled></div>
+      <div class="form-group form-full"><label>¿Hay novedad?</label>
+        <div style="display:flex;gap:12px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:14px;font-weight:normal"><input type="radio" name="dn" value="no" checked onchange="toggleNovedad(false)"> Sin novedad</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:14px;font-weight:normal"><input type="radio" name="dn" value="si" onchange="toggleNovedad(true)"> Con novedad</label>
+        </div></div>
+      <div id="novedad-fields" style="display:none;grid-column:1/-1">
+        <div class="form-group"><label>Estado de la herramienta</label>
+          <select class="form-control" id="dn-estado"><option value="en_reparacion">En reparación</option><option value="fuera_servicio">Fuera de servicio</option><option value="extraviado">Extraviado</option></select>
+        </div>
+      </div>
+      <div class="form-group form-full"><label>Observaciones <span id="dn-obs-req" style="display:none" class="req">*</span></label>
+        <textarea class="form-control" id="dn-obs" placeholder="Estado al devolver, notas..."></textarea>
+      </div>
+    </div>`,[
+    { label:'📥 Confirmar Devolución', class:'btn-success', fn:async()=>{
+      const novedad=document.querySelector('input[name="dn"]:checked')?.value==='si';
+      const obs=document.getElementById('dn-obs').value.trim();
+      if (novedad&&!obs) { toast('Ingresá una observación sobre la novedad','error'); return; }
+      const res=await api('registrarDevolucion',{prestamoId,conNovedad:novedad,estadoNovedad:novedad?document.getElementById('dn-estado').value:null,observaciones:obs,usuario:currentUser.username});
+      if (res.success) { toast('Devolución registrada correctamente','success'); closeModal(); await loadArticulosCache(); renderPrestamos(); }
+      else toast(res.error||'Error','error');
+    }},
+    { label:'Cancelar', class:'btn-outline', fn:closeModal }
+  ]);
+}
+function toggleNovedad(si) { document.getElementById('novedad-fields').style.display=si?'grid':'none'; document.getElementById('dn-obs-req').style.display=si?'inline':'none'; }
+
+// ================================================================
+// ENTREGA DE CONSUMIBLES
+// ================================================================
+async function renderEntregas() {
+  if (!appData.articulos.length) await loadArticulosCache();
+  const cons=appData.articulos.filter(a=>a.tipo==='consumible'&&a.activo);
+  showPage(`<div style="max-width:620px;margin:0 auto"><div class="card">
+    <div class="card-header"><div class="card-title">📤 Registrar Entrega de Consumibles</div></div>
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Artículo <span class="req">*</span></label>
+        <select class="form-control" id="ent-art" onchange="updateStockInfo(this,'ent-stock')">
+          <option value="">— Seleccioná artículo —</option>
+          ${cons.map(a=>`<option value="${a.id}" data-stock="${a.stock}" data-min="${a.stockMinimo}">${a.nombre} — Stock: ${a.stock} ${a.unidad}</option>`).join('')}
+        </select><div id="ent-stock" style="margin-top:6px"></div></div>
+      <div class="form-group"><label>Destinatario <span class="req">*</span></label>
+        <select class="form-control" id="ent-dest" onchange="handleOtro(this,'ent-otro-wrap')">
+          <option value="">— Seleccioná persona —</option>
+          ${appData.personal.map(p=>`<option value="${p.nombre} ${p.apellido}">${p.nombre} ${p.apellido} — ${p.cargo}</option>`).join('')}
+          <option value="__otro__">➕ Otro (persona externa)</option>
+        </select></div>
+      <div class="form-group"><label>Cantidad <span class="req">*</span></label><input type="number" class="form-control" id="ent-cant" min="1" value="1"></div>
+      <div class="otro-field form-full" id="ent-otro-wrap">
+        <label style="font-size:12px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px">Nombre completo <span class="req">*</span></label>
+        <input type="text" class="form-control" id="ent-otro" placeholder="Ej: Ing. Paula Ramírez (Facultad de Ciencias)">
+        <span class="form-hint">Quedará registrado como "Otro: [nombre]"</span>
+      </div>
+      <div class="form-group form-full"><label>Observaciones</label><textarea class="form-control" id="ent-obs"></textarea></div>
+    </div>
+    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="navigateTo('dashboard')">Cancelar</button>
+      <button class="btn btn-gold" id="ent-btn" onclick="submitEntrega()">📤 Confirmar Entrega</button>
+    </div>
+  </div></div>`);
+}
+async function submitEntrega() {
+  const artId=document.getElementById('ent-art').value;
+  const cant=parseInt(document.getElementById('ent-cant').value);
+  const destSel=document.getElementById('ent-dest').value;
+  const obs=document.getElementById('ent-obs').value;
+  if (!artId) { toast('Seleccioná un artículo','error'); return; }
+  if (!cant||cant<1) { toast('Cantidad inválida','error'); return; }
+  let dest=destSel;
+  if (destSel==='__otro__') { const otro=document.getElementById('ent-otro').value.trim(); if(!otro){toast('Ingresá el nombre','error');return;} dest='Otro: '+otro; }
+  if (!dest) { toast('Seleccioná un destinatario','error'); return; }
+  const art=appData.articulos.find(a=>a.id===artId);
+  const btn=document.getElementById('ent-btn'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Registrando...';
+  const res=await api('saveMovimiento',{tipo:'entrega',articuloId:artId,articuloNombre:art?.nombre,categoria:art?.categoria,destinatario:dest,cantidad:cant,observaciones:obs,usuario:currentUser.username});
+  btn.disabled=false; btn.textContent='📤 Confirmar Entrega';
+  if (res.success) { toast('Entrega registrada correctamente','success'); await loadArticulosCache(); await loadAlertCount(); renderEntregas(); }
+  else toast(res.error||'Error','error');
+}
+
+// ================================================================
+// NUEVO PRÉSTAMO
+// ================================================================
+async function renderNuevoPrestamo() {
+  if (!appData.articulos.length) await loadArticulosCache();
+  const reutilizables=appData.articulos.filter(a=>a.tipo==='reutilizable'&&a.activo&&a.estado==='disponible');
+  showPage(`<div style="max-width:620px;margin:0 auto"><div class="card">
+    <div class="card-header"><div class="card-title">📋 Registrar Préstamo de Herramienta</div></div>
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Artículo disponible <span class="req">*</span></label>
+        <select class="form-control" id="pr-art">
+          <option value="">— Seleccioná herramienta —</option>
+          ${reutilizables.map(a=>`<option value="${a.id}">${a.nombre}${a.nroPatrimonial?' · Pat:'+a.nroPatrimonial:''}</option>`).join('')}
+        </select>
+        ${reutilizables.length===0?'<p class="form-hint" style="color:var(--warning)">⚠ No hay herramientas disponibles en este momento</p>':''}</div>
+      <div class="form-group"><label>Destinatario <span class="req">*</span></label>
+        <select class="form-control" id="pr-dest" onchange="handleOtro(this,'pr-otro-wrap')">
+          <option value="">— Seleccioná persona —</option>
+          ${appData.personal.map(p=>`<option value="${p.nombre} ${p.apellido}">${p.nombre} ${p.apellido} — ${p.cargo}</option>`).join('')}
+          <option value="__otro__">➕ Otro (persona externa)</option>
+        </select></div>
+      <div class="form-group"><label>Fecha Devolución Esperada</label><input type="date" class="form-control" id="pr-fecha-dev" value="${getFutureDate(3)}"></div>
+      <div class="otro-field form-full" id="pr-otro-wrap">
+        <label style="font-size:12px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px">Nombre completo <span class="req">*</span></label>
+        <input type="text" class="form-control" id="pr-otro" placeholder="Ej: Contratista Mario González">
+      </div>
+      <div class="form-group form-full"><label>Propósito del préstamo</label><input type="text" class="form-control" id="pr-proposito" placeholder="Ej: Instalación eléctrica Pabellón 3"></div>
+      <div class="form-group form-full"><label>Observaciones</label><textarea class="form-control" id="pr-obs"></textarea></div>
+    </div>
+    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="navigateTo('dashboard')">Cancelar</button>
+      <button class="btn btn-gold" id="pr-btn" onclick="submitPrestamo()">📋 Confirmar Préstamo</button>
+    </div>
+  </div></div>`);
+}
+async function submitPrestamo() {
+  const artId=document.getElementById('pr-art').value;
+  const destSel=document.getElementById('pr-dest').value;
+  const fechaDev=document.getElementById('pr-fecha-dev').value;
+  const proposito=document.getElementById('pr-proposito').value;
+  const obs=document.getElementById('pr-obs').value;
+  if (!artId) { toast('Seleccioná una herramienta','error'); return; }
+  let dest=destSel;
+  if (destSel==='__otro__') { const otro=document.getElementById('pr-otro').value.trim(); if(!otro){toast('Ingresá el nombre','error');return;} dest='Otro: '+otro; }
+  if (!dest) { toast('Seleccioná un destinatario','error'); return; }
+  const art=appData.articulos.find(a=>a.id===artId);
+  const btn=document.getElementById('pr-btn'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Registrando...';
+  const res=await api('saveMovimiento',{tipo:'prestamo',articuloId:artId,articuloNombre:art?.nombre,categoria:art?.categoria,destinatario:dest,cantidad:1,fechaDevolucionEsperada:fechaDev,proposito,observaciones:obs,usuario:currentUser.username});
+  btn.disabled=false; btn.textContent='📋 Confirmar Préstamo';
+  if (res.success) { toast('Préstamo registrado correctamente','success'); await loadArticulosCache(); renderNuevoPrestamo(); }
+  else toast(res.error||'Error','error');
+}
+
+// ================================================================
+// DEVOLUCIÓN
+// ================================================================
+async function renderDevolucion() {
+  const res=await api('getPrestamosActivos',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const prs=res.prestamos;
+  showPage(`<div style="max-width:620px;margin:0 auto"><div class="card">
+    <div class="card-header"><div class="card-title">📥 Registrar Devolución</div></div>
+    ${prs.length===0 ? '<p style="color:var(--text-muted);text-align:center;padding:20px">No hay préstamos activos para devolver</p>' : `
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Préstamo a devolver <span class="req">*</span></label>
+        <select class="form-control" id="dev-prestamo">
+          <option value="">— Seleccioná préstamo —</option>
+          ${prs.map(p=>`<option value="${p.id}">${p.articuloNombre} — ${p.destinatario} (desde ${formatDate(p.fechaInicio)})</option>`).join('')}
+        </select></div>
+      <div class="form-group form-full"><label>¿Hay alguna novedad?</label>
+        <div style="display:flex;gap:12px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:14px;font-weight:normal"><input type="radio" name="dev-novedad" value="no" checked onchange="toggleNovedadDevolucion(false)"> Sin novedad</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:14px;font-weight:normal"><input type="radio" name="dev-novedad" value="si" onchange="toggleNovedadDevolucion(true)"> Con novedad</label>
+        </div></div>
+      <div id="dev-novedad-fields" style="display:none;grid-column:1/-1">
+        <div class="form-group"><label>Estado de la herramienta</label>
+          <select class="form-control" id="dev-estado-novedad">
+            <option value="en_reparacion">En reparación</option>
+            <option value="fuera_servicio">Fuera de servicio</option>
+            <option value="extraviado">Extraviado</option>
+          </select></div>
+      </div>
+      <div class="form-group form-full"><label>Observaciones <span id="dev-obs-req" style="display:none" class="req">*</span></label>
+        <textarea class="form-control" id="dev-obs" placeholder="Estado al devolver, notas adicionales..."></textarea></div>
+    </div>
+    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="navigateTo('prestamos')">Cancelar</button>
+      <button class="btn btn-success" id="dev-btn" onclick="submitDevolucion()">📥 Confirmar Devolución</button>
+    </div>`}
+  </div></div>`);
+}
+function toggleNovedadDevolucion(si) { document.getElementById('dev-novedad-fields').style.display=si?'grid':'none'; document.getElementById('dev-obs-req').style.display=si?'inline':'none'; }
+async function submitDevolucion() {
+  const prestamoId=document.getElementById('dev-prestamo')?.value;
+  const novedad=document.querySelector('input[name="dev-novedad"]:checked')?.value==='si';
+  const obs=document.getElementById('dev-obs')?.value.trim();
+  const estadoNov=document.getElementById('dev-estado-novedad')?.value;
+  if (!prestamoId) { toast('Seleccioná un préstamo','error'); return; }
+  if (novedad&&!obs) { toast('Ingresá una observación','error'); return; }
+  const btn=document.getElementById('dev-btn'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Registrando...';
+  const res=await api('registrarDevolucion',{prestamoId,conNovedad:novedad,estadoNovedad:novedad?estadoNov:null,observaciones:obs,usuario:currentUser.username});
+  btn.disabled=false; btn.textContent='📥 Confirmar Devolución';
+  if (res.success) { toast('Devolución registrada correctamente','success'); await loadArticulosCache(); renderDevolucion(); }
+  else toast(res.error||'Error','error');
+}
+
+// ================================================================
+// INGRESO DE STOCK
+// ================================================================
+async function renderIngresoStock() {
+  if (!appData.articulos.length) await loadArticulosCache();
+  const cons=appData.articulos.filter(a=>a.tipo==='consumible'&&a.activo);
+  showPage(`<div style="max-width:620px;margin:0 auto"><div class="card">
+    <div class="card-header"><div class="card-title">📨 Ingreso de Stock</div></div>
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Artículo <span class="req">*</span></label>
+        <select class="form-control" id="is-art" onchange="updateStockInfo(this,'is-stock')">
+          <option value="">— Seleccioná artículo —</option>
+          ${cons.map(a=>`<option value="${a.id}" data-stock="${a.stock}" data-min="${a.stockMinimo}">${a.nombre} — Stock actual: ${a.stock} ${a.unidad}</option>`).join('')}
+        </select><div id="is-stock" style="margin-top:6px"></div></div>
+      <div class="form-group"><label>Cantidad recibida <span class="req">*</span></label><input type="number" class="form-control" id="is-cant" min="1" value="1"></div>
+      <div class="form-group"><label>Proveedor</label>
+        <select class="form-control" id="is-prov">
+          <option value="">— Sin proveedor —</option>
+          ${appData.proveedores.map(p=>`<option value="${p.nombre}">${p.nombre}</option>`).join('')}
+        </select></div>
+      <div class="form-group"><label>Número de Remito</label><input type="text" class="form-control" id="is-remito" placeholder="REM-0042"></div>
+      <div class="form-group form-full"><label>Observaciones</label><textarea class="form-control" id="is-obs"></textarea></div>
+    </div>
+    <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="navigateTo('dashboard')">Cancelar</button>
+      <button class="btn btn-primary" id="is-btn" onclick="submitIngreso()">📨 Confirmar Ingreso</button>
+    </div>
+  </div></div>`);
+}
+async function submitIngreso() {
+  const artId=document.getElementById('is-art').value; const cant=parseInt(document.getElementById('is-cant').value);
+  const prov=document.getElementById('is-prov').value; const remito=document.getElementById('is-remito').value; const obs=document.getElementById('is-obs').value;
+  if (!artId) { toast('Seleccioná un artículo','error'); return; }
+  if (!cant||cant<1) { toast('Cantidad inválida','error'); return; }
+  const art=appData.articulos.find(a=>a.id===artId);
+  const btn=document.getElementById('is-btn'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Registrando...';
+  const res=await api('saveMovimiento',{tipo:'ingreso',articuloId:artId,articuloNombre:art?.nombre,categoria:art?.categoria,destinatario:'Ingreso de stock',cantidad:cant,proveedor:prov,remito,observaciones:obs,usuario:currentUser.username});
+  btn.disabled=false; btn.textContent='📨 Confirmar Ingreso';
+  if (res.success) { toast('Ingreso registrado correctamente','success'); await loadArticulosCache(); renderIngresoStock(); }
+  else toast(res.error||'Error','error');
+}
+
+// ================================================================
+// HISTORIAL
+// ================================================================
+async function renderHistorial() {
+  setTopbarActions(`<button class="topbar-btn" onclick="exportHistorial()">⬇️ <span>Exportar CSV</span></button>`);
+  const res=await api('getMovimientos',{filtro:{limite:200}});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const TM = {
+    ingreso:      {l:'Ingreso',      cl:'badge-success', i:'📨'},
+    entrega:      {l:'Entrega',      cl:'badge-info',    i:'📤'},
+    prestamo:     {l:'Préstamo',     cl:'badge-navy',    i:'📋'},
+    devolucion:   {l:'Devolución',   cl:'badge-gray',    i:'📥'},
+    cambio_estado:{l:'Cambio Estado',cl:'badge-warning', i:'🔄'}
+  };
+  const rows=res.movimientos.map(m=>{
+    const t=TM[m.tipo]||{l:m.tipo,cl:'badge-gray',i:'📌'};
+    return `<tr>
+      <td data-label="Fecha">${formatDate(m.fecha)}</td>
+      <td data-label="Tipo"><span class="badge ${t.cl}">${t.i} ${t.l}</span></td>
+      <td data-label="Artículo"><strong>${m.articuloNombre}</strong></td>
+      <td data-label="Categoría">${m.categoria||'—'}</td>
+      <td data-label="Destinatario">${m.destinatario||'—'}</td>
+      <td data-label="Cantidad">${m.cantidad||'—'}</td>
+      <td data-label="Usuario">${m.usuario}</td>
+      <td data-label="Observaciones" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'—'}</td></tr>`;
+  }).join('')||`<tr><td colspan="8" class="table-empty">Sin movimientos</td></tr>`;
+  showPage(`
+    <div class="filters-bar">
+      <input type="text" class="filter-input wide" id="h-buscar" placeholder="🔍 Buscar..." oninput="filtrarHistorial()">
+      <select class="filter-input" id="h-tipo" onchange="filtrarHistorial()">
+        <option value="">Todos los tipos</option><option value="ingreso">Ingreso</option><option value="entrega">Entrega</option>
+        <option value="prestamo">Préstamo</option><option value="devolucion">Devolución</option><option value="cambio_estado">Cambio Estado</option>
+      </select>
+      <input type="date" class="filter-input" id="h-desde" onchange="filtrarHistorial()">
+      <input type="date" class="filter-input" id="h-hasta" onchange="filtrarHistorial()">
+    </div>
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Artículo</th><th>Categoría</th><th>Destinatario</th><th>Cant.</th><th>Usuario</th><th>Observaciones</th></tr></thead>
+      <tbody id="historial-body">${rows}</tbody>
+    </table></div></div>`);
+}
+function filtrarHistorial() {
+  const b=document.getElementById('h-buscar').value.toLowerCase();
+  const t=document.getElementById('h-tipo').value;
+  document.querySelectorAll('#historial-body tr').forEach(tr=>{
+    tr.style.display=(!b||tr.textContent.toLowerCase().includes(b))&&(!t||tr.innerHTML.includes(t))?'':'none';
+  });
+}
+async function exportHistorial() { const res=await api('exportCSV',{tipo:'movimientos_periodo'}); if(res.success) downloadCSV(res.csv,res.filename); else toast('Error al exportar','error'); }
+
+// ================================================================
+// ALERTAS
+// ================================================================
+async function renderAlertas() {
+  setTopbarActions(`<button class="topbar-btn" onclick="marcarTodasLeidas()">✓ Marcar todas leídas</button>`);
+  const res=await api('getAlertas',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const TI = {
+    stock_cero:      {icon:'🚨', label:'STOCK AGOTADO',       cl:'unread'},
+    stock_minimo:    {icon:'⚠️', label:'Stock Mínimo',         cl:'warn-orange'},
+    prestamo_vencido:{icon:'📅', label:'Préstamo Vencido',     cl:'unread'},
+    vencimiento:     {icon:'📆', label:'Vencimiento Próximo',  cl:'warn-orange'}
+  };
+  const renderList = arr => arr.map(a=>{
+    const t=TI[a.tipo]||{icon:'🔔',label:a.tipo,cl:''};
+    return `<div class="alert-item ${a.leida?'':t.cl}" id="alert-${a.id}">
+      <div class="alert-icon">${t.icon}</div>
+      <div class="alert-content"><div class="alert-title">${t.label} — ${a.nombre}</div><div class="alert-detail">${a.detalle}</div><div class="alert-date">${formatDate(a.fecha)}</div></div>
+      ${!a.leida?`<button class="btn btn-outline btn-sm" onclick="marcarUnaLeida('${a.id}')">Leída</button>`:'<span style="font-size:11px;color:var(--text-light)">Leída</span>'}
+    </div>`;
+  }).join('');
+  const noLeidas=res.alertas.filter(a=>!a.leida); const leidas=res.alertas.filter(a=>a.leida);
+  showPage(`
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><div class="card-title">🔴 Sin leer (${noLeidas.length})</div></div>
+      ${noLeidas.length ? renderList(noLeidas) : '<p style="color:var(--text-muted);text-align:center;padding:20px">🎉 Sin alertas pendientes</p>'}
+    </div>
+    ${leidas.length ? `<div class="card"><div class="card-header"><div class="card-title">Historial de alertas (${leidas.length})</div></div>${renderList(leidas)}</div>` : ''}`);
+}
+async function marcarTodasLeidas() { const res=await api('marcarAlertaLeida',{todas:true}); if(res.success){toast('Todas marcadas como leídas','success');await loadAlertCount();renderAlertas();} }
+async function marcarUnaLeida(id) { const res=await api('marcarAlertaLeida',{id}); if(res.success){await loadAlertCount();document.getElementById('alert-'+id)?.remove();} }
+
+// ================================================================
+// REPORTES
+// ================================================================
+function renderReportes() {
+  const REPS=[
+    {tipo:'stock_categoria',    icon:'📊', title:'Stock por Categoría',    desc:'Inventario agrupado por categoría'},
+    {tipo:'stock_critico',      icon:'⚠️', title:'Stock Crítico',           desc:'Artículos bajo el stock mínimo'},
+    {tipo:'prestamos_activos',  icon:'🔑', title:'Préstamos Activos',       desc:'Herramientas en circulación'},
+    {tipo:'prestamos_vencidos', icon:'📅', title:'Préstamos Vencidos',      desc:'Superaron la fecha esperada'},
+    {tipo:'top_articulos',      icon:'📈', title:'Top Artículos Usados',    desc:'Los más solicitados'},
+    {tipo:'sin_movimiento',     icon:'💤', title:'Sin Movimiento (60d)',     desc:'Sin actividad en 60 días'},
+    {tipo:'multiples_prestamos',icon:'👥', title:'Múltiples Préstamos',     desc:'Personas con más de un préstamo activo'},
+    {tipo:'movimientos_periodo',icon:'📜', title:'Movimientos por Período', desc:'Todos los movimientos en un rango de fechas'},
+  ];
+  showPage(`<div class="grid-2">${REPS.map(r=>`
+    <div class="card">
+      <div style="display:flex;gap:14px;align-items:center"><div style="font-size:28px">${r.icon}</div><div><div class="card-title">${r.title}</div><div class="card-subtitle">${r.desc}</div></div></div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" onclick="verReporte('${r.tipo}')">Ver reporte</button>
+        <button class="btn btn-primary btn-sm" onclick="exportarReporte('${r.tipo}')">⬇️ Exportar CSV</button>
+      </div>
+    </div>`).join('')}</div>`);
+}
+async function verReporte(tipo) {
+  openModal(tipo.replace(/_/g,' ').toUpperCase(), `<div class="loading-overlay"><div class="spinner spinner-dark"></div> Generando...</div>`, [
+    {label:'⬇️ Exportar CSV', class:'btn-primary', fn:()=>exportarReporte(tipo)},
+    {label:'Cerrar', class:'btn-outline', fn:closeModal}
+  ]);
+  const res=await api('getReportes',{tipo});
+  if (!res.success) { document.getElementById('modal-body').innerHTML=`<p style="color:var(--danger)">${res.error}</p>`; return; }
+  if (!res.datos.length) { document.getElementById('modal-body').innerHTML='<p style="color:var(--text-muted);text-align:center;padding:20px">Sin datos para mostrar</p>'; return; }
+  const keys=Object.keys(res.datos[0]);
+  document.getElementById('modal-box').classList.add('modal-lg');
+  document.getElementById('modal-body').innerHTML=`<div class="table-wrap"><table>
+    <thead><tr>${res.headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${res.datos.map(row=>`<tr>${keys.map(k=>`<td data-label="${k}">${row[k]!==undefined?row[k]:'—'}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table></div>`;
+}
+async function exportarReporte(tipo) { const res=await api('exportCSV',{tipo}); if(res.success){downloadCSV(res.csv,res.filename);toast('CSV descargado','success');}else toast('Error al exportar','error'); }
+
+// ================================================================
+// PERSONAL
+// ================================================================
+async function renderPersonal() {
+  setTopbarActions(`<button class="topbar-btn gold" onclick="openModalPersonal()">+ Agregar Personal</button>`);
+  const res=await api('getPersonal',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const rows=res.personal.map(p=>`<tr>
+    <td data-label="Nombre"><strong>${p.nombre} ${p.apellido}</strong></td>
+    <td data-label="Cargo">${p.cargo||'—'}</td>
+    <td data-label="Sector">${p.sector||'—'}</td>
+    <td data-label="Teléfono">${p.telefono||'—'}</td>
+    <td data-label="Estado"><span class="badge ${p.activo?'badge-success':'badge-gray'}">${p.activo?'Activo':'Inactivo'}</span></td>
+    <td data-label="Acciones"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalPersonal(${JSON.stringify(p)})'>✏️</button></td>
+  </tr>`).join('')||`<tr><td colspan="6" class="table-empty">Sin personal registrado</td></tr>`;
+  showPage(`<div class="card">
+    <div class="card-header"><div><div class="card-title">Personal de Mantenimiento (${res.personal.length})</div><div class="card-subtitle">Aparecen como destinatarios en entregas y préstamos</div></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Nombre</th><th>Cargo</th><th>Sector</th><th>Teléfono</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`);
+}
+function openModalPersonal(p) {
+  const esNuevo=!p||!p.id;
+  openModal(esNuevo?'Agregar Personal':'Editar Personal', `
+    <div class="form-grid">
+      <div class="form-group"><label>Nombre <span class="req">*</span></label><input type="text" class="form-control" id="pm-nombre" value="${p?.nombre||''}"></div>
+      <div class="form-group"><label>Apellido <span class="req">*</span></label><input type="text" class="form-control" id="pm-apellido" value="${p?.apellido||''}"></div>
+      <div class="form-group"><label>Cargo</label><input type="text" class="form-control" id="pm-cargo" value="${p?.cargo||''}"></div>
+      <div class="form-group"><label>Sector</label><input type="text" class="form-control" id="pm-sector" value="${p?.sector||''}"></div>
+      <div class="form-group"><label>Teléfono</label><input type="text" class="form-control" id="pm-tel" value="${p?.telefono||''}"></div>
+      ${!esNuevo?`<div class="form-group"><label>Estado</label><select class="form-control" id="pm-activo"><option value="true" ${p?.activo?'selected':''}>Activo</option><option value="false" ${!p?.activo?'selected':''}>Inactivo</option></select></div>`:''}
+    </div>`, [
+    { label:esNuevo?'Agregar':'Guardar', class:'btn-gold', fn:async()=>{
+      const nombre=document.getElementById('pm-nombre').value.trim(); const apellido=document.getElementById('pm-apellido').value.trim();
+      if (!nombre||!apellido) { toast('Nombre y apellido son obligatorios','error'); return; }
+      const res=await api('savePersonal',{id:p?.id,nombre,apellido,cargo:document.getElementById('pm-cargo').value,sector:document.getElementById('pm-sector').value,telefono:document.getElementById('pm-tel').value,activo:!p?true:document.getElementById('pm-activo').value==='true',usuario:currentUser.username});
+      if (res.success) { toast(res.message,'success'); closeModal(); await loadBaseData(); renderPersonal(); }
+      else toast(res.error,'error');
+    }},
+    { label:'Cancelar', class:'btn-outline', fn:closeModal }
+  ]);
+}
+
+// ================================================================
+// CATEGORÍAS
+// ================================================================
+async function renderCategorias() {
+  setTopbarActions(`<button class="topbar-btn gold" onclick="openModalCategoria()">+ Nueva Categoría</button>`);
+  const res=await api('getCategorias',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const rows=res.categorias.map(c=>`<tr>
+    <td data-label="Ícono">${c.icono}</td>
+    <td data-label="Nombre"><strong>${c.nombre}</strong></td>
+    <td data-label="Descripción">${c.descripcion||'—'}</td>
+    <td data-label="Estado"><span class="badge ${c.activo?'badge-success':'badge-gray'}">${c.activo?'Activa':'Inactiva'}</span></td>
+    <td data-label="Acciones"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalCategoria(${JSON.stringify(c)})'>✏️</button></td>
+  </tr>`).join('')||`<tr><td colspan="5" class="table-empty">Sin categorías</td></tr>`;
+  showPage(`<div class="card">
+    <div class="card-header"><div class="card-title">Categorías (${res.categorias.length})</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Ícono</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`);
+}
+function openModalCategoria(c) {
+  const esNueva=!c||!c.id;
+  openModal(esNueva?'Nueva Categoría':'Editar Categoría', `
+    <div class="form-grid">
+      <div class="form-group"><label>Nombre <span class="req">*</span></label><input type="text" class="form-control" id="cm-nombre" value="${c?.nombre||''}"></div>
+      <div class="form-group"><label>Ícono (emoji)</label><input type="text" class="form-control" id="cm-icono" value="${c?.icono||'📦'}" placeholder="📦"></div>
+      <div class="form-group form-full"><label>Descripción</label><input type="text" class="form-control" id="cm-desc" value="${c?.descripcion||''}"></div>
+      ${!esNueva?`<div class="form-group"><label>Estado</label><select class="form-control" id="cm-activo"><option value="true" ${c?.activo?'selected':''}>Activa</option><option value="false" ${!c?.activo?'selected':''}>Inactiva</option></select></div>`:''}
+    </div>`, [
+    { label:esNueva?'Crear':'Guardar', class:'btn-gold', fn:async()=>{
+      const nombre=document.getElementById('cm-nombre').value.trim();
+      if (!nombre) { toast('El nombre es obligatorio','error'); return; }
+      const res=await api('saveCategoria',{id:c?.id,nombre,icono:document.getElementById('cm-icono').value||'📦',descripcion:document.getElementById('cm-desc').value,activo:!c?true:document.getElementById('cm-activo').value==='true',usuario:currentUser.username});
+      if (res.success) { toast(res.message,'success'); closeModal(); await loadBaseData(); renderCategorias(); }
+      else toast(res.error,'error');
+    }},
+    { label:'Cancelar', class:'btn-outline', fn:closeModal }
+  ]);
+}
+
+// ================================================================
+// PROVEEDORES
+// ================================================================
+async function renderProveedores() {
+  setTopbarActions(`<button class="topbar-btn gold" onclick="openModalProveedor()">+ Nuevo Proveedor</button>`);
+  const res=await api('getProveedores',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const rows=res.proveedores.map(p=>`<tr>
+    <td data-label="Nombre"><strong>${p.nombre}</strong></td>
+    <td data-label="CUIT">${p.cuit||'—'}</td>
+    <td data-label="Contacto">${p.contacto||'—'}</td>
+    <td data-label="Teléfono">${p.telefono||'—'}</td>
+    <td data-label="Email">${p.email||'—'}</td>
+    <td data-label="Estado"><span class="badge ${p.activo?'badge-success':'badge-gray'}">${p.activo?'Activo':'Inactivo'}</span></td>
+    <td data-label="Acciones"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalProveedor(${JSON.stringify(p)})'>✏️</button></td>
+  </tr>`).join('')||`<tr><td colspan="7" class="table-empty">Sin proveedores</td></tr>`;
+  showPage(`<div class="card">
+    <div class="card-header"><div class="card-title">Proveedores (${res.proveedores.length})</div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Nombre</th><th>CUIT</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`);
+}
+function openModalProveedor(p) {
+  const esNuevo=!p||!p.id;
+  openModal(esNuevo?'Nuevo Proveedor':'Editar Proveedor', `
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Nombre <span class="req">*</span></label><input type="text" class="form-control" id="pv-nombre" value="${p?.nombre||''}"></div>
+      <div class="form-group"><label>CUIT</label><input type="text" class="form-control" id="pv-cuit" value="${p?.cuit||''}" placeholder="30-12345678-9"></div>
+      <div class="form-group"><label>Contacto</label><input type="text" class="form-control" id="pv-contacto" value="${p?.contacto||''}"></div>
+      <div class="form-group"><label>Teléfono</label><input type="text" class="form-control" id="pv-tel" value="${p?.telefono||''}"></div>
+      <div class="form-group"><label>Email</label><input type="email" class="form-control" id="pv-email" value="${p?.email||''}"></div>
+      ${!esNuevo?`<div class="form-group"><label>Estado</label><select class="form-control" id="pv-activo"><option value="true" ${p?.activo?'selected':''}>Activo</option><option value="false" ${!p?.activo?'selected':''}>Inactivo</option></select></div>`:''}
+    </div>`, [
+    { label:esNuevo?'Crear':'Guardar', class:'btn-gold', fn:async()=>{
+      const nombre=document.getElementById('pv-nombre').value.trim();
+      if (!nombre) { toast('El nombre es obligatorio','error'); return; }
+      const res=await api('saveProveedor',{id:p?.id,nombre,cuit:document.getElementById('pv-cuit').value,contacto:document.getElementById('pv-contacto').value,telefono:document.getElementById('pv-tel').value,email:document.getElementById('pv-email').value,activo:!p?true:document.getElementById('pv-activo').value==='true',usuario:currentUser.username});
+      if (res.success) { toast(res.message,'success'); closeModal(); await loadBaseData(); renderProveedores(); }
+      else toast(res.error,'error');
+    }},
+    { label:'Cancelar', class:'btn-outline', fn:closeModal }
+  ]);
+}
+
+// ================================================================
+// USUARIOS DEL SISTEMA
+// ================================================================
+async function renderUsuarios() {
+  setTopbarActions(`<button class="topbar-btn gold" onclick="openModalUsuario()">+ Nuevo Usuario</button>`);
+  const res=await api('getUsuarios',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const RL={admin:'👑 Administrador',encargado:'🔑 Encargado',supervisor:'👁️ Supervisor',consulta:'🔍 Consulta'};
+  const rows=res.usuarios.map(u=>`<tr>
+    <td data-label="Usuario"><strong>${u.username}</strong></td>
+    <td data-label="Nombre">${u.nombre}</td>
+    <td data-label="Rol"><span class="badge badge-navy">${RL[u.rol]||u.rol}</span></td>
+    <td data-label="Email">${u.email||'—'}</td>
+    <td data-label="Estado"><span class="badge ${u.activo?'badge-success':'badge-danger'}">${u.activo?'Activo':'Inactivo'}</span></td>
+    <td data-label="Acciones">${u.id!==currentUser.id?`<button class="btn btn-outline btn-sm btn-icon" onclick='openModalUsuario(${JSON.stringify(u)})'>✏️</button>`:'<span style="font-size:11px;color:var(--text-light)">Sesión actual</span>'}</td>
+  </tr>`).join('')||`<tr><td colspan="6" class="table-empty">Sin usuarios</td></tr>`;
+  showPage(`<div class="card">
+    <div class="card-header"><div><div class="card-title">Usuarios del Sistema (${res.usuarios.length})</div><div class="card-subtitle">Usuarios que pueden iniciar sesión en el sistema</div></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Email</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`);
+}
+function openModalUsuario(u) {
+  const esNuevo=!u||!u.id;
+  openModal(esNuevo?'Nuevo Usuario':'Editar Usuario', `
+    <div class="form-grid">
+      <div class="form-group"><label>Username <span class="req">*</span></label><input type="text" class="form-control" id="um-user" value="${u?.username||''}" ${!esNuevo?'readonly':''}></div>
+      <div class="form-group"><label>Nombre completo <span class="req">*</span></label><input type="text" class="form-control" id="um-nombre" value="${u?.nombre||''}"></div>
+      <div class="form-group"><label>${esNuevo?'Contraseña':'Nueva contraseña'} ${esNuevo?'<span class="req">*</span>':''}</label><input type="password" class="form-control" id="um-pass" placeholder="${esNuevo?'Contraseña':'Dejar vacío para no cambiar'}"></div>
+      <div class="form-group"><label>Rol <span class="req">*</span></label>
+        <select class="form-control" id="um-rol">
+          <option value="admin"     ${u?.rol==='admin'     ?'selected':''}>👑 Administrador</option>
+          <option value="encargado" ${u?.rol==='encargado' ?'selected':''}>🔑 Encargado</option>
+          <option value="supervisor"${u?.rol==='supervisor'?'selected':''}>👁️ Supervisor</option>
+          <option value="consulta"  ${u?.rol==='consulta'  ?'selected':''}>🔍 Consulta</option>
+        </select></div>
+      <div class="form-group"><label>Email</label><input type="email" class="form-control" id="um-email" value="${u?.email||''}"></div>
+      ${!esNuevo?`<div class="form-group"><label>Estado</label><select class="form-control" id="um-activo"><option value="true" ${u?.activo?'selected':''}>Activo</option><option value="false" ${!u?.activo?'selected':''}>Inactivo</option></select></div>`:''}
+    </div>
+    ${esNuevo?`<div style="margin-top:14px;background:var(--bg);border-radius:8px;padding:12px;font-size:12px;color:var(--text-muted)">
+      <strong>Roles:</strong> 👑 Admin — acceso total · 🔑 Encargado — operaciones · 👁️ Supervisor — solo lectura y reportes · 🔍 Consulta — solo catálogo</div>`:''}
+  `, [
+    { label:esNuevo?'Crear Usuario':'Guardar', class:'btn-gold', fn:async()=>{
+      const username=document.getElementById('um-user').value.trim();
+      const nombre=document.getElementById('um-nombre').value.trim();
+      const pass=document.getElementById('um-pass').value;
+      const rol=document.getElementById('um-rol').value;
+      if (!username||!nombre) { toast('Usuario y nombre son obligatorios','error'); return; }
+      if (esNuevo&&!pass) { toast('La contraseña es obligatoria para nuevos usuarios','error'); return; }
+      const data={id:u?.id,username,nombre,rol,email:document.getElementById('um-email').value,activo:!u?true:document.getElementById('um-activo').value==='true',usuarioActual:currentUser.username};
+      if (pass) data.password=pass;
+      const res=await api('saveUsuario',data);
+      if (res.success) { toast(res.message,'success'); closeModal(); renderUsuarios(); }
+      else toast(res.error,'error');
+    }},
+    { label:'Cancelar', class:'btn-outline', fn:closeModal }
+  ]);
+}
+
+// ================================================================
+// CONFIGURACIÓN
+// ================================================================
+async function renderConfiguracion() {
+  const res=await api('getConfig',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const cfg=res.config;
+  showPage(`<div style="max-width:640px">
+    <div class="card">
+      <div class="card-header"><div class="card-title">⚙️ Configuración del Sistema</div></div>
+      <div class="form-grid">
+        <div class="form-group form-full"><label>Nombre del sistema</label><input type="text" class="form-control" id="cfg-nombre" value="${cfg.nombreSistema||''}"></div>
+        <div class="form-group form-full"><label>Nombre institucional</label><input type="text" class="form-control" id="cfg-inst" value="${cfg.institucion||''}"></div>
+        <div class="form-group form-full"><label>Email de alertas automáticas</label>
+          <input type="email" class="form-control" id="cfg-email" value="${cfg.emailAlertas||''}" placeholder="panol@unsl.edu.ar">
+          <span class="form-hint">Las alertas de stock y préstamos vencidos se envían a este email</span></div>
+        <div class="form-group"><label>Días anticipación alertas vencimiento</label><input type="number" class="form-control" id="cfg-dias-venc" value="${cfg.diasVencimiento||7}" min="1" max="60"></div>
+        <div class="form-group"><label>Días máximos de préstamo por defecto</label><input type="number" class="form-control" id="cfg-dias-prest" value="${cfg.diasPrestamo||3}" min="1"></div>
+      </div>
+      <div style="margin-top:20px;display:flex;justify-content:flex-end">
+        <button class="btn btn-gold" id="cfg-btn" onclick="saveConfig()">💾 Guardar Configuración</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><div class="card-title">ℹ️ Información del Sistema</div></div>
+      <div style="display:grid;gap:10px;font-size:13px;color:var(--text-muted)">
+        <div><strong>Arquitectura:</strong> Netlify → Google Apps Script → Google Sheets</div>
+        <div><strong>Versión:</strong> 1.0.0 — Sistema de Gestión de Pañol UNSL</div>
+        <div><strong>Alertas automáticas:</strong> Trigger diario 8:00 AM (configurar en Apps Script)</div>
+        <div><strong>Exportaciones:</strong> CSV desde el módulo de Reportes</div>
+      </div>
+    </div>
+  </div>`);
+}
+async function saveConfig() {
+  const btn=document.getElementById('cfg-btn'); btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Guardando...';
+  const res=await api('saveConfig',{config:{nombreSistema:document.getElementById('cfg-nombre').value,institucion:document.getElementById('cfg-inst').value,emailAlertas:document.getElementById('cfg-email').value,diasVencimiento:document.getElementById('cfg-dias-venc').value,diasPrestamo:document.getElementById('cfg-dias-prest').value},usuario:currentUser.username});
+  btn.disabled=false; btn.textContent='💾 Guardar Configuración';
+  if (res.success) toast(res.message,'success'); else toast(res.error||'Error al guardar','error');
+}
+
+// ================================================================
+// AUDITORÍA
+// ================================================================
+async function renderAuditoria() {
+  const res=await api('getAuditoria',{});
+  if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
+  const rows=res.logs.map(l=>`<tr>
+    <td data-label="Fecha">${formatDate(l.fecha)}</td>
+    <td data-label="Acción"><span class="badge badge-navy">${l.accion}</span></td>
+    <td data-label="Detalle" style="max-width:280px;word-break:break-all;font-size:12px">${l.detalle}</td>
+    <td data-label="Usuario">${l.usuario}</td>
+  </tr>`).join('')||`<tr><td colspan="4" class="table-empty">Sin registros</td></tr>`;
+  showPage(`<div class="card">
+    <div class="card-header"><div><div class="card-title">Log de Auditoría</div><div class="card-subtitle">Últimas 200 acciones críticas del sistema</div></div></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Acción</th><th>Detalle</th><th>Usuario</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`);
+}
+
+// ================================================================
+// MODAL NUEVO ARTÍCULO
+// ================================================================
+async function openModalNuevoArticulo() {
+  const catOpts=appData.categorias.map(c=>`<option value="${c.nombre}">${c.icono} ${c.nombre}</option>`).join('');
+  openModal('Nuevo Artículo', `
+    <div class="tabs" id="art-tabs">
+      <button class="tab-btn active" onclick="setArtTab('consumible',this)">📦 Consumible</button>
+      <button class="tab-btn" onclick="setArtTab('reutilizable',this)">🔧 Reutilizable</button>
+    </div>
+    <div id="art-tipo" data-tipo="consumible"></div>
+    <div class="form-grid" style="margin-top:12px">
+      <div class="form-group form-full"><label>Nombre <span class="req">*</span></label><input type="text" class="form-control" id="am-nombre"></div>
+      <div class="form-group form-full"><label>Descripción</label><input type="text" class="form-control" id="am-desc"></div>
+      <div class="form-group"><label>Categoría <span class="req">*</span></label><select class="form-control" id="am-cat"><option value="">— Seleccioná —</option>${catOpts}</select></div>
+      <div class="form-group"><label>Unidad de medida</label><input type="text" class="form-control" id="am-unidad" value="unidad" placeholder="unidad, metro, caja..."></div>
+      <div class="form-group"><label>Ubicación en pañol</label><input type="text" class="form-control" id="am-ubicacion" placeholder="Ej: Estante A-1"></div>
+      <div id="am-extra"></div>
+      <div class="form-group"><label>Nro Patrimonial</label><input type="text" class="form-control" id="am-patrimonio" placeholder="PAT-2024-0001"></div>
+      <div class="form-group"><label>Nro de Serie</label><input type="text" class="form-control" id="am-serie"></div>
+      <div class="form-group"><label>Fecha de Vencimiento</label><input type="date" class="form-control" id="am-venc"></div>
+      <div class="form-group form-full"><label>Observaciones</label><textarea class="form-control" id="am-obs"></textarea></div>
+    </div>`, [
+    { label:'Crear Artículo', class:'btn-gold', fn:async()=>{
+      const nombre=document.getElementById('am-nombre').value.trim();
+      const cat=document.getElementById('am-cat').value;
+      const tipo=document.getElementById('art-tipo').dataset.tipo;
+      if (!nombre) { toast('El nombre es obligatorio','error'); return; }
+      if (!cat)    { toast('La categoría es obligatoria','error'); return; }
+      const data={nombre,tipo,categoria:cat,descripcion:document.getElementById('am-desc').value,unidad:document.getElementById('am-unidad').value||'unidad',ubicacion:document.getElementById('am-ubicacion').value,nroPatrimonial:document.getElementById('am-patrimonio').value,nroSerie:document.getElementById('am-serie').value,fechaVencimiento:document.getElementById('am-venc').value,observaciones:document.getElementById('am-obs').value,usuario:currentUser.username};
+      if (tipo==='consumible') { data.stockInicial=parseInt(document.getElementById('am-stock-inicial')?.value)||0; data.stockMinimo=parseInt(document.getElementById('am-stock-min')?.value)||0; data.stockMaximo=parseInt(document.getElementById('am-stock-max')?.value)||0; }
+      const res=await api('saveArticulo',data);
+      if (res.success) { toast(res.message,'success'); closeModal(); await loadArticulosCache(); renderCatalogo(); }
+      else toast(res.error,'error');
+    }},
+    { label:'Cancelar', class:'btn-outline', fn:closeModal }
+  ], 'modal-lg');
+  setArtTab('consumible', document.querySelector('#art-tabs .tab-btn'));
+}
+function setArtTab(tipo, btn) {
+  document.getElementById('art-tipo').dataset.tipo=tipo;
+  document.querySelectorAll('#art-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const extra=document.getElementById('am-extra');
+  if (tipo==='consumible') {
+    extra.innerHTML=`
+      <div class="form-group"><label>Stock inicial</label><input type="number" class="form-control" id="am-stock-inicial" min="0" value="0"></div>
+      <div class="form-group"><label>Stock mínimo</label><input type="number" class="form-control" id="am-stock-min" min="0" value="0"><span class="form-hint">Genera alerta al llegar a este nivel</span></div>
+      <div class="form-group"><label>Stock máximo</label><input type="number" class="form-control" id="am-stock-max" min="0" value="0"></div>`;
+  } else extra.innerHTML='';
+}
+
+// ================================================================
+// MODAL EDITAR ARTÍCULO
+// ================================================================
+async function openModalEditarArticulo(id) {
+  const art=appData.articulos.find(a=>a.id===id);
+  if (!art) return;
+  const catOpts=appData.categorias.map(c=>`<option value="${c.nombre}" ${c.nombre===art.categoria?'selected':''}>${c.icono} ${c.nombre}</option>`).join('');
+  openModal('Editar Artículo', `
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Nombre <span class="req">*</span></label><input type="text" class="form-control" id="em-nombre" value="${escHtml(art.nombre)}"></div>
+      <div class="form-group form-full"><label>Descripción</label><input type="text" class="form-control" id="em-desc" value="${escHtml(art.descripcion||'')}"></div>
+      <div class="form-group"><label>Categoría</label><select class="form-control" id="em-cat">${catOpts}</select></div>
+      <div class="form-group"><label>Tipo</label><input type="text" class="form-control" value="${art.tipo}" disabled></div>
+      <div class="form-group"><label>Unidad</label><input type="text" class="form-control" id="em-unidad" value="${art.unidad||''}"></div>
+      <div class="form-group"><label>Ubicación</label><input type="text" class="form-control" id="em-ubicacion" value="${escHtml(art.ubicacion||'')}"></div>
+      ${art.tipo==='consumible'?`
+      <div class="form-group"><label>Stock mínimo</label><input type="number" class="form-control" id="em-stock-min" value="${art.stockMinimo||0}" min="0"></div>
+      <div class="form-group"><label>Stock máximo</label><input type="number" class="form-control" id="em-stock-max" value="${art.stockMaximo||0}" min="0"></div>`:''}
+      <div class="form-group"><label>Nro Patrimonial</label><input type="text" class="form-control" id="em-patrimonio" value="${art.nroPatrimonial||''}"></div>
+      <div class="form-group"><label>Nro Serie</label><input type="text" class="form-control" id="em-serie" value="${art.nroSerie||''}"></div>
+      <div class="form-group"><label>Fecha Vencimiento</label><input type="date" class="form-control" id="em-venc" value="${art.fechaVencimiento||''}"></div>
+      <div class="form-group"><label>Activo</label><select class="form-control" id="em-activo"><option value="true" ${art.activo?'selected':''}>Sí</option><option value="false" ${!art.activo?'selected':''}>No</option></select></div>
+      <div class="form-group form-full"><label>Observaciones</label><textarea class="form-control" id="em-obs">${escHtml(art.observaciones||'')}</textarea></div>
+    </div>`, [
+    { label:'Guardar', class:'btn-gold', fn:async()=>{
+      const data={id:art.id,tipo:art.tipo,nombre:document.getElementById('em-nombre').value.trim(),descripcion:document.getElementById('em-desc').value,categoria:document.getElementById('em-cat').value,unidad:document.getElementById('em-unidad').value,ubicacion:document.getElementById('em-ubicacion').value,nroPatrimonial:document.getElementById('em-patrimonio').value,nroSerie:document.getElementById('em-serie').value,fechaVencimiento:document.getElementById('em-venc').value,activo:document.getElementById('em-activo').value==='true',observaciones:document.getElementById('em-obs').value,stockMinimo:document.getElementById('em-stock-min')?.value,stockMaximo:document.getElementById('em-stock-max')?.value,usuario:currentUser.username};
+      const res=await api('saveArticulo',data);
+      if (res.success) { toast(res.message,'success'); closeModal(); await loadArticulosCache(); renderCatalogo(); }
+      else toast(res.error,'error');
+    }},
+    { label:'Cancelar', class:'btn-outline', fn:closeModal }
+  ], 'modal-lg');
+}
+
+// ================================================================
+// MODAL CAMBIAR ESTADO
+// ================================================================
+function openModalCambiarEstado(artId, artNombre) {
+  openModal('Cambiar Estado de Artículo', `
+    <div class="form-grid">
+      <div class="form-group form-full"><label>Artículo</label><input type="text" class="form-control" value="${artNombre}" disabled></div>
+      <div class="form-group form-full"><label>Nuevo estado <span class="req">*</span></label>
+        <select class="form-control" id="cs-estado">
+          <option value="disponible">✅ Disponible</option>
+          <option value="en_reparacion">🔧 En reparación</option>
+          <option value="fuera_servicio">🚫 Fuera de servicio</option>
+          <option value="extraviado">❓ Extraviado</option>
+        </select></div>
+      <div class="form-group form-full"><label>Observación / Justificación <span class="req">*</span></label>
+        <textarea class="form-control" id="cs-obs" placeholder="Ej: Motor quemado, enviado a taller externo..."></textarea>
+        <span class="form-hint">Obligatorio para cualquier cambio de estado</span>
+      </div>
+    </div>`, [
+    { label:'Cambiar Estado', class:'btn-gold', fn:async()=>{
+      const nuevoEstado=document.getElementById('cs-estado').value;
+      const obs=document.getElementById('cs-obs').value.trim();
+      if (!obs) { toast('La observación es obligatoria','error'); return; }
+      const res=await api('cambiarEstado',{articuloId:artId,nuevoEstado,observaciones:obs,usuario:currentUser.username,usuarioNombre:currentUser.nombre});
+      if (res.success) { toast(res.message,'success'); closeModal(); await loadArticulosCache(); renderCatalogo(); }
+      else toast(res.error,'error');
+    }},
+    { label:'Cancelar', class:'btn-outline', fn:closeModal }
+  ]);
+}
+
+// ================================================================
+// UTILIDADES GLOBALES
+// ================================================================
+function showPage(html)           { document.getElementById('page-content').innerHTML=html; }
+function setTopbarActions(html)   { document.getElementById('topbar-actions').innerHTML=html; }
+function hasPermission(roles)     { return currentUser && roles.includes(currentUser.rol); }
+
+function handleOtro(sel, wrapId) {
+  const wrap=document.getElementById(wrapId);
+  if (!wrap) return;
+  if (sel.value==='__otro__') { wrap.classList.add('visible'); wrap.style.display='flex'; }
+  else { wrap.classList.remove('visible'); wrap.style.display='none'; }
+}
+function updateStockInfo(sel, targetId) {
+  const opt=sel.options[sel.selectedIndex];
+  const stock=opt.dataset.stock; const min=opt.dataset.min;
+  const el=document.getElementById(targetId);
+  if (!el||!stock) return;
+  el.innerHTML=getStockBadge(parseInt(stock), parseInt(min));
+}
+function getStockBadge(stock, min) {
+  if (stock===0)         return `<span class="stock-badge stock-agotado"><span class="stock-dot"></span>AGOTADO</span>`;
+  if (stock<=min)        return `<span class="stock-badge stock-crit"><span class="stock-dot"></span>${stock} (mín: ${min})</span>`;
+  if (stock<=min*1.5)    return `<span class="stock-badge stock-min"><span class="stock-dot"></span>${stock} (mín: ${min})</span>`;
+  return                        `<span class="stock-badge stock-ok"><span class="stock-dot"></span>${stock}</span>`;
+}
+function getEstadoBadge(estado) {
+  const M = {
+    disponible:    '<span class="badge badge-success">✅ Disponible</span>',
+    prestado:      '<span class="badge badge-info">📋 Prestado</span>',
+    en_reparacion: '<span class="badge badge-warning">🔧 En reparación</span>',
+    fuera_servicio:'<span class="badge badge-danger">🚫 Fuera de servicio</span>',
+    extraviado:    '<span class="badge" style="background:#ede9fe;color:#5b21b6">❓ Extraviado</span>',
+  };
+  return M[estado] || `<span class="badge badge-gray">${estado}</span>`;
+}
+function formatDate(d) {
+  if (!d) return '—';
+  const date=new Date(d);
+  if (isNaN(date)) return String(d);
+  return date.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function getFutureDate(days) {
+  return new Date(Date.now()+days*24*60*60*1000).toISOString().split('T')[0];
+}
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function downloadCSV(csv, filename) {
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename||'export.csv'; a.click(); URL.revokeObjectURL(url);
+}
+
+// ── MODAL ──
+function openModal(title, bodyHtml, buttons, extraClass) {
+  document.getElementById('modal-title').textContent=title;
+  document.getElementById('modal-body').innerHTML=bodyHtml;
+  document.getElementById('modal-box').className='modal'+(extraClass?' '+extraClass:'');
+  const footer=document.getElementById('modal-footer'); footer.innerHTML='';
+  (buttons||[]).forEach(b=>{
+    const btn=document.createElement('button'); btn.className='btn '+b.class; btn.textContent=b.label; btn.onclick=b.fn; footer.appendChild(btn);
+  });
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal()           { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalIfOverlay(e) { if (e.target===document.getElementById('modal-overlay')) closeModal(); }
+
+// ── TOAST ──
+function toast(msg, type='success') {
+  const container=document.getElementById('toasts');
+  const el=document.createElement('div'); el.className='toast '+type;
+  const icon=type==='success'?'✓':type==='error'?'✕':'⚠';
+  el.innerHTML=`<span>${icon}</span><span>${msg}</span>`;
+  container.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(30px)'; el.style.transition='all 0.3s'; setTimeout(()=>el.remove(),300); }, 3500);
+}
+
+// ── SIDEBAR MÓVIL ──
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sidebar-overlay').classList.toggle('open'); }
+function closeSidebar()  { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebar-overlay').classList.remove('open'); }
+
+// ── ENTER EN LOGIN ──
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  document.getElementById('login-user').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('login-pass').focus(); });
+});
+
+// ── RESTAURAR SESIÓN ──
+(function() {
+  const saved=sessionStorage.getItem('panol_user');
+  if (saved) {
+    try { currentUser=JSON.parse(saved); initApp(); }
+    catch(e) { sessionStorage.removeItem('panol_user'); }
+  }
+})();
+</script>
+</body>
+</html>
