@@ -218,14 +218,12 @@ async function getSettingsDoc() {
 }
 function csvEscape(v) {
   const s = String(v ?? '');
-  return /[",
-;]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  return /[",;\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function buildCsv(rows) {
   if (!rows.length) return '';
   const headers = Object.keys(rows[0]);
-  return [headers.join(';'), ...rows.map(r => headers.map(h => csvEscape(r[h])).join(';'))].join('
-');
+  return [headers.join(';'), ...rows.map(r => headers.map(h => csvEscape(r[h])).join(';'))].join('\n');
 }
 async function queryItems(data={}) {
   let rows = (await allDocs('items')).map(mapItem);
