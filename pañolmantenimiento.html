@@ -43,11 +43,24 @@ input, select, textarea { font-family:'DM Sans',sans-serif; }
 .login-btn:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(201,168,76,0.45); }
 .login-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
 .login-error { background:rgba(220,38,38,0.15); border:1px solid rgba(220,38,38,0.3); border-radius:6px; color:#fca5a5; padding:10px 14px; font-size:13px; margin-bottom:16px; display:none; }
-.login-roles { margin-top:24px; border-top:1px solid rgba(255,255,255,0.08); padding-top:20px; }
-.login-roles p { color:rgba(255,255,255,0.4); font-size:11px; text-align:center; margin-bottom:12px; text-transform:uppercase; letter-spacing:1px; }
-.login-role-pills { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
-.role-pill { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:99px; padding:4px 12px; font-size:11px; color:rgba(255,255,255,0.5); cursor:pointer; transition:var(--transition); }
-.role-pill:hover { background:rgba(201,168,76,0.12); border-color:rgba(201,168,76,0.3); color:var(--gold-light); }
+
+/* ── BUSCADOR ARTÍCULO ── */
+.art-search-wrap { position:relative; margin-bottom:6px; }
+.art-search-input { width:100%; background:var(--white); border:1px solid var(--border); border-radius:7px; padding:9px 13px 9px 34px; font-size:14px; color:var(--text); outline:none; transition:var(--transition); }
+.art-search-input:focus { border-color:var(--navy); box-shadow:0 0 0 3px rgba(27,42,74,0.08); }
+.art-search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:14px; pointer-events:none; }
+.art-dropdown { position:absolute; top:calc(100% + 4px); left:0; right:0; background:white; border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow-lg); z-index:500; max-height:220px; overflow-y:auto; display:none; }
+.art-dropdown.open { display:block; animation:slideDown 0.18s ease; }
+.art-option { padding:9px 13px; font-size:13.5px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:8px; transition:background 0.12s; border-bottom:1px solid var(--border); }
+.art-option:last-child { border-bottom:none; }
+.art-option:hover, .art-option.selected { background:var(--bg); }
+.art-option-name { font-weight:500; color:var(--navy); }
+.art-option-meta { font-size:11px; color:var(--text-muted); flex-shrink:0; }
+.art-selected-pill { display:none; align-items:center; gap:8px; background:rgba(27,42,74,0.07); border-radius:6px; padding:7px 12px; font-size:13px; color:var(--navy); font-weight:500; margin-top:4px; }
+.art-selected-pill.visible { display:flex; }
+.art-selected-pill button { background:none; border:none; color:var(--text-muted); font-size:15px; cursor:pointer; line-height:1; padding:0 2px; }
+.art-selected-pill button:hover { color:var(--danger); }
+.art-no-results { padding:14px; text-align:center; color:var(--text-muted); font-size:13px; }
 
 /* ── LAYOUT ── */
 #app { display:none; min-height:100vh; }
@@ -236,8 +249,7 @@ textarea.form-control { resize:vertical; min-height:80px; }
 </style>
 </head>
 <body>
-
-<!-- ===== LOGIN ===== -->
+  <!-- ===== LOGIN ===== -->
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">
@@ -249,15 +261,6 @@ textarea.form-control { resize:vertical; min-height:80px; }
     <div class="login-field"><label>Usuario</label><input type="text" id="login-user" placeholder="usuario" autocomplete="username"></div>
     <div class="login-field"><label>Contraseña</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
     <button class="login-btn" id="login-btn" onclick="doLogin()"><span id="login-btn-text">Ingresar al Sistema</span></button>
-    <div class="login-roles">
-      <p>Acceso rápido demo</p>
-      <div class="login-role-pills">
-        <div class="role-pill" onclick="quickLogin('admin','Admin2024!')">👑 Admin</div>
-        <div class="role-pill" onclick="quickLogin('encargado','Panol2024!')">🔑 Encargado</div>
-        <div class="role-pill" onclick="quickLogin('supervisor','Super2024!')">👁️ Supervisor</div>
-        <div class="role-pill" onclick="quickLogin('consulta','Consul2024')">🔍 Consulta</div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -302,7 +305,7 @@ textarea.form-control { resize:vertical; min-height:80px; }
 
 <script>
 // ================================================================
-// CONFIG — REEMPLAZAR CON URL DEL DEPLOY DE GOOGLE APPS SCRIPT
+// CONFIG
 // ================================================================
 const API_URL = 'https://script.google.com/macros/s/AKfycbyCS2uL-gOsi3WReyxgpZGkrovK8DZQf_F_XQQZWp-CvS2RJtOmW2p72GJnzAK5qf4VCA/exec';
 
@@ -385,7 +388,6 @@ async function doLogin() {
   } else showLoginError(res.error || 'Credenciales incorrectas');
 }
 function showLoginError(msg) { const el=document.getElementById('login-error'); el.textContent=msg; el.style.display='block'; }
-function quickLogin(u,p) { document.getElementById('login-user').value=u; document.getElementById('login-pass').value=p; doLogin(); }
 function doLogout() {
   if (!confirm('¿Cerrar sesión?')) return;
   currentUser=null; sessionStorage.removeItem('panol_user');
@@ -579,15 +581,32 @@ function renderMovimientoRapido() {
   if (!appData.articulos.length) loadArticulosCache().then(()=>setMRTab('entrega',null));
   else setMRTab('entrega', document.querySelector('#mr-tabs .tab-btn'));
 }
-let mrTab='entrega';
+
+// ── Buscador de artículos ──
+let mrTab = 'entrega';
+let mrSelectedArt = null;
+
 function setMRTab(tipo, btn) {
-  mrTab=tipo;
-  document.querySelectorAll('#mr-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  mrTab = tipo;
+  mrSelectedArt = null;
+  document.removeEventListener('click', mrOutsideClick);
+  document.querySelectorAll('#mr-tabs .tab-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const artsF = appData.articulos.filter(a=> tipo==='entrega'?a.tipo==='consumible': tipo==='prestamo'?a.tipo==='reutilizable':true);
-  let ao=`<option value="">— Seleccioná artículo —</option>`;
-  artsF.forEach(a=>{ const ex=a.tipo==='consumible'?` (Stock:${a.stock})`:`(${a.estado})`; ao+=`<option value="${a.id}">${a.nombre} ${ex}</option>`; });
-  const df = tipo!=='ingreso' ? `
+
+  const artsF = appData.articulos.filter(a =>
+    tipo === 'entrega'  ? a.tipo === 'consumible' :
+    tipo === 'prestamo' ? a.tipo === 'reutilizable' && a.estado === 'disponible' : true
+  );
+
+  const optsData = artsF.map(a => ({
+    id: a.id,
+    nombre: a.nombre,
+    meta: a.tipo === 'consumible' ? `Stock: ${a.stock} ${a.unidad||''}`.trim() : a.estado
+  }));
+
+  const optsJson = JSON.stringify(optsData).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  const df = tipo !== 'ingreso' ? `
     <div class="form-group"><label>Destinatario <span class="req">*</span></label>
       <select class="form-control" id="mr-dest" onchange="handleOtro(this,'mr-otro-wrap')">
         <option value="">— Seleccioná persona —</option>
@@ -599,39 +618,139 @@ function setMRTab(tipo, btn) {
       <input type="text" class="form-control" id="mr-otro" placeholder="Ej: Ing. Paula Ramírez">
     </div>` : `
     <div class="form-group"><label>Proveedor</label>
-      <select class="form-control" id="mr-prov"><option value="">— Sin proveedor —</option>${appData.proveedores.map(p=>`<option value="${p.nombre}">${p.nombre}</option>`).join('')}</select></div>
-    <div class="form-group"><label>Remito</label><input type="text" class="form-control" id="mr-remito" placeholder="REM-0042"></div>`;
-  const cf = tipo!=='prestamo' ? `
-    <div class="form-group"><label>Cantidad <span class="req">*</span></label><input type="number" class="form-control" id="mr-cant" min="1" value="1"></div>` : `
-    <div class="form-group"><label>Fecha Devolución</label><input type="date" class="form-control" id="mr-fecha-dev" value="${getFutureDate(3)}"></div>
-    <div class="form-group"><label>Propósito</label><input type="text" class="form-control" id="mr-proposito" placeholder="Ej: Reparación Edificio B"></div>`;
-  document.getElementById('mr-form').innerHTML=`
+      <select class="form-control" id="mr-prov"><option value="">— Sin proveedor —</option>
+        ${appData.proveedores.map(p=>`<option value="${p.nombre}">${p.nombre}</option>`).join('')}
+      </select></div>
+    <div class="form-group"><label>Remito</label>
+      <input type="text" class="form-control" id="mr-remito" placeholder="REM-0042"></div>`;
+
+  const cf = tipo !== 'prestamo' ? `
+    <div class="form-group"><label>Cantidad <span class="req">*</span></label>
+      <input type="number" class="form-control" id="mr-cant" min="1" value="1"></div>` : `
+    <div class="form-group"><label>Fecha Devolución</label>
+      <input type="date" class="form-control" id="mr-fecha-dev" value="${getFutureDate(3)}"></div>
+    <div class="form-group"><label>Propósito</label>
+      <input type="text" class="form-control" id="mr-proposito" placeholder="Ej: Reparación Edificio B"></div>`;
+
+  document.getElementById('mr-form').innerHTML = `
     <div class="form-grid">
-      <div class="form-group form-full"><label>Artículo <span class="req">*</span></label><select class="form-control" id="mr-art">${ao}</select></div>
+      <div class="form-group form-full">
+        <label>Artículo <span class="req">*</span></label>
+        <div class="art-search-wrap" id="mr-art-wrap">
+          <span class="art-search-icon">🔍</span>
+          <input type="text" class="art-search-input" id="mr-art-search"
+            placeholder="Escribí para buscar artículo..."
+            autocomplete="off"
+            oninput="mrFilterDrop()"
+            onfocus="mrOpenDrop()">
+          <div class="art-dropdown" id="mr-art-dropdown"></div>
+        </div>
+        <div class="art-selected-pill" id="mr-art-pill">
+          <span id="mr-art-pill-text"></span>
+          <button onclick="mrClearSel()">✕</button>
+        </div>
+        <input type="hidden" id="mr-art-id">
+      </div>
       ${df}${cf}
-      <div class="form-group form-full"><label>Observaciones</label><input type="text" class="form-control" id="mr-obs" placeholder="Opcional"></div>
+      <div class="form-group form-full">
+        <label>Observaciones</label>
+        <input type="text" class="form-control" id="mr-obs" placeholder="Opcional">
+      </div>
     </div>
-    <div style="margin-top:20px"><button class="btn btn-gold" style="width:100%;padding:14px" onclick="submitMR()">✓ Confirmar ${tipo==='entrega'?'Entrega':tipo==='prestamo'?'Préstamo':'Ingreso'}</button></div>`;
+    <div style="margin-top:20px">
+      <button class="btn btn-gold" style="width:100%;padding:14px" onclick="submitMR()">
+        ✓ Confirmar ${tipo==='entrega'?'Entrega':tipo==='prestamo'?'Préstamo':'Ingreso'}
+      </button>
+    </div>`;
+
+  // Guardar opciones en variable global para acceso desde handlers inline
+  window._mrOpts = optsData;
+  mrRenderOpts('');
+  setTimeout(() => document.addEventListener('click', mrOutsideClick), 50);
 }
-async function loadArticulosCache() { const res=await api('getArticulos',{filtro:{activo:true}}); if(res.success) appData.articulos=res.articulos; }
+
+function mrRenderOpts(q) {
+  const dd = document.getElementById('mr-art-dropdown');
+  if (!dd) return;
+  const opts = window._mrOpts || [];
+  const filtered = q ? opts.filter(o => o.nombre.toLowerCase().includes(q.toLowerCase())) : opts;
+  if (!filtered.length) {
+    dd.innerHTML = `<div class="art-no-results">${q ? 'Sin resultados para "'+q+'"' : 'Sin artículos disponibles'}</div>`;
+  } else {
+    dd.innerHTML = filtered.map(o =>
+      `<div class="art-option" onclick="mrSelectArt('${o.id}',${JSON.stringify(o.nombre)},${JSON.stringify(o.meta)})">
+        <span class="art-option-name">${o.nombre}</span>
+        <span class="art-option-meta">${o.meta}</span>
+      </div>`
+    ).join('');
+  }
+}
+
+function mrFilterDrop() {
+  const q = document.getElementById('mr-art-search')?.value || '';
+  document.getElementById('mr-art-dropdown')?.classList.add('open');
+  mrRenderOpts(q);
+}
+
+function mrOpenDrop() {
+  const q = document.getElementById('mr-art-search')?.value || '';
+  mrRenderOpts(q);
+  document.getElementById('mr-art-dropdown')?.classList.add('open');
+}
+
+function mrSelectArt(id, nombre, meta) {
+  mrSelectedArt = id;
+  document.getElementById('mr-art-id').value = id;
+  document.getElementById('mr-art-search').value = '';
+  document.getElementById('mr-art-search').placeholder = 'Buscar otro artículo...';
+  document.getElementById('mr-art-pill-text').textContent = nombre + ' — ' + meta;
+  document.getElementById('mr-art-pill').classList.add('visible');
+  document.getElementById('mr-art-dropdown').classList.remove('open');
+}
+
+function mrClearSel() {
+  mrSelectedArt = null;
+  document.getElementById('mr-art-id').value = '';
+  document.getElementById('mr-art-search').value = '';
+  document.getElementById('mr-art-search').placeholder = 'Escribí para buscar artículo...';
+  document.getElementById('mr-art-pill').classList.remove('visible');
+  mrRenderOpts('');
+  document.getElementById('mr-art-dropdown').classList.add('open');
+  document.getElementById('mr-art-search').focus();
+}
+
+function mrOutsideClick(e) {
+  const wrap = document.getElementById('mr-art-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('mr-art-dropdown')?.classList.remove('open');
+  }
+}
+
+async function loadArticulosCache() {
+  const res = await api('getArticulos',{filtro:{activo:true}});
+  if (res.success) appData.articulos = res.articulos;
+}
+
 async function submitMR() {
-  const tipo=mrTab; const artId=document.getElementById('mr-art')?.value; const obs=document.getElementById('mr-obs')?.value;
+  const tipo = mrTab;
+  const artId = document.getElementById('mr-art-id')?.value;
+  const obs = document.getElementById('mr-obs')?.value;
   if (!artId) { toast('Seleccioná un artículo','error'); return; }
-  let destValue='';
-  if (tipo!=='ingreso') {
-    const ds=document.getElementById('mr-dest')?.value;
-    if (ds==='__otro__') { const otro=document.getElementById('mr-otro')?.value.trim(); if(!otro){toast('Ingresá el nombre del destinatario','error');return;} destValue='Otro: '+otro; }
-    else destValue=ds;
+  let destValue = '';
+  if (tipo !== 'ingreso') {
+    const ds = document.getElementById('mr-dest')?.value;
+    if (ds === '__otro__') { const otro=document.getElementById('mr-otro')?.value.trim(); if(!otro){toast('Ingresá el nombre del destinatario','error');return;} destValue='Otro: '+otro; }
+    else destValue = ds;
     if (!destValue) { toast('Seleccioná un destinatario','error'); return; }
   }
-  const art=appData.articulos.find(a=>a.id===artId);
-  const data={tipo,articuloId:artId,articuloNombre:art?.nombre||artId,categoria:art?.categoria||'',usuario:currentUser.username,observaciones:obs};
+  const art = appData.articulos.find(a => a.id === artId);
+  const data = {tipo, articuloId:artId, articuloNombre:art?.nombre||artId, categoria:art?.categoria||'', usuario:currentUser.username, observaciones:obs};
   if (tipo==='prestamo')     { data.destinatario=destValue; data.fechaDevolucionEsperada=document.getElementById('mr-fecha-dev')?.value; data.proposito=document.getElementById('mr-proposito')?.value; data.cantidad=1; }
   else if (tipo==='entrega') { data.destinatario=destValue; data.cantidad=parseInt(document.getElementById('mr-cant')?.value)||1; }
   else { data.destinatario='Ingreso de stock'; data.cantidad=parseInt(document.getElementById('mr-cant')?.value)||1; data.proveedor=document.getElementById('mr-prov')?.value; data.remito=document.getElementById('mr-remito')?.value; }
-  const btn=document.querySelector('#mr-form .btn-gold');
+  const btn = document.querySelector('#mr-form .btn-gold');
   btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Registrando...';
-  const res=await api('saveMovimiento',data);
+  const res = await api('saveMovimiento', data);
   btn.disabled=false; btn.textContent='✓ Confirmar';
   if (res.success) { toast(res.message||'Operación registrada','success'); await loadArticulosCache(); setMRTab(tipo,null); await loadAlertCount(); }
   else toast(res.error||'Error al registrar','error');
@@ -813,7 +932,7 @@ async function renderNuevoPrestamo() {
         <label style="font-size:12px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px">Nombre completo <span class="req">*</span></label>
         <input type="text" class="form-control" id="pr-otro" placeholder="Ej: Contratista Mario González">
       </div>
-      <div class="form-group form-full"><label>Propósito del préstamo</label><input type="text" class="form-control" id="pr-proposito" placeholder="Ej: Instalación eléctrica Pabellón 3"></div>
+      <div class="form-group form-full"><label>Propósito del préstamo</label><input type="text" class="form-control" id="pr-proposito" placeholder="Ej: Instalación eléctrica Aula 16"></div>
       <div class="form-group form-full"><label>Observaciones</label><textarea class="form-control" id="pr-obs"></textarea></div>
     </div>
     <div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end">
@@ -933,9 +1052,7 @@ async function submitIngreso() {
   btn.disabled=false; btn.textContent='📨 Confirmar Ingreso';
   if (res.success) { toast('Ingreso registrado correctamente','success'); await loadArticulosCache(); renderIngresoStock(); }
   else toast(res.error||'Error','error');
-}
-
-// ================================================================
+  // ================================================================
 // HISTORIAL
 // ================================================================
 async function renderHistorial() {
@@ -1274,15 +1391,6 @@ async function renderConfiguracion() {
         <button class="btn btn-gold" id="cfg-btn" onclick="saveConfig()">💾 Guardar Configuración</button>
       </div>
     </div>
-    <div class="card" style="margin-top:16px">
-      <div class="card-header"><div class="card-title">ℹ️ Información del Sistema</div></div>
-      <div style="display:grid;gap:10px;font-size:13px;color:var(--text-muted)">
-        <div><strong>Arquitectura:</strong> Netlify → Google Apps Script → Google Sheets</div>
-        <div><strong>Versión:</strong> 1.0.0 — Sistema de Gestión de Pañol UNSL</div>
-        <div><strong>Alertas automáticas:</strong> Trigger diario 8:00 AM (configurar en Apps Script)</div>
-        <div><strong>Exportaciones:</strong> CSV desde el módulo de Reportes</div>
-      </div>
-    </div>
   </div>`);
 }
 async function saveConfig() {
@@ -1451,10 +1559,10 @@ function updateStockInfo(sel, targetId) {
   el.innerHTML=getStockBadge(parseInt(stock), parseInt(min));
 }
 function getStockBadge(stock, min) {
-  if (stock===0)         return `<span class="stock-badge stock-agotado"><span class="stock-dot"></span>AGOTADO</span>`;
-  if (stock<=min)        return `<span class="stock-badge stock-crit"><span class="stock-dot"></span>${stock} (mín: ${min})</span>`;
-  if (stock<=min*1.5)    return `<span class="stock-badge stock-min"><span class="stock-dot"></span>${stock} (mín: ${min})</span>`;
-  return                        `<span class="stock-badge stock-ok"><span class="stock-dot"></span>${stock}</span>`;
+  if (stock===0)      return `<span class="stock-badge stock-agotado"><span class="stock-dot"></span>AGOTADO</span>`;
+  if (stock<=min)     return `<span class="stock-badge stock-crit"><span class="stock-dot"></span>${stock}</span>`;
+  if (stock<=min*1.5) return `<span class="stock-badge stock-min"><span class="stock-dot"></span>${stock}</span>`;
+  return                     `<span class="stock-badge stock-ok"><span class="stock-dot"></span>${stock}</span>`;
 }
 function getEstadoBadge(estado) {
   const M = {
@@ -1529,3 +1637,4 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </script>
 </body>
 </html>
+}
