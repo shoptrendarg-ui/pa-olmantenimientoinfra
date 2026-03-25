@@ -2,9 +2,15 @@
 <html lang="es">
 <head>
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, collection, getDocs, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+  createUserWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc,
+  collection, getDocs, query, where, orderBy, limit, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBxtbTZmNzxSh9YBWIwrGx0_i8x4LLFeHY",
@@ -19,100 +25,581 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+const nowTs = () => Timestamp.now();
+const toDate = (v) => {
+  if (!v) return null;
+  if (typeof v?.toDate === 'function') return v.toDate();
+  if (v instanceof Date) return v;
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+};
+const toIso = (v) => {
+  const d = toDate(v);
+  return d ? d.toISOString() : '';
+};
+const toYmd = (v) => {
+  const d = toDate(v);
+  return d ? d.toISOString().slice(0,10) : '';
+};
+const pick = (obj, ...keys) => {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];
+  }
+  return undefined;
+};
+const normBool = (v, def=true) => {
+  if (v === undefined || v === null || v === '') return def;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'string') return ['true','1','si','sí','activo'].includes(v.toLowerCase());
+  return !!v;
+};
+const withId = (snap) => ({ id: snap.id, ...snap.data() });
+
+function mapCategory(row) {
+  return {
+    id: row.id,
+    nombre: pick(row,'nombre','Nombre') || '',
+    descripcion: pick(row,'descripcion','Descripción') || '',
+    icono: pick(row,'icono','Ícono') || '📦',
+    activo: normBool(pick(row,'activo','Activo'), true)
+  };
+}
+function mapStaff(row) {
+  const nombre = pick(row,'nombre','Nombre') || '';
+  const apellido = pick(row,'apellido','Apellido') || '';
+  return {
+    id: row.id,
+    nombre,
+    apellido,
+    nombreCompleto: pick(row,'nombreCompleto') || [nombre,apellido].filter(Boolean).join(' '),
+    cargo: pick(row,'cargo','Cargo') || '',
+    sector: pick(row,'sector','Sector') || '',
+    telefono: pick(row,'telefono','Teléfono') || '',
+    email: pick(row,'email','Email') || '',
+    activo: normBool(pick(row,'activo','Activo'), true)
+  };
+}
+function mapSupplier(row) {
+  return {
+    id: row.id,
+    nombre: pick(row,'nombre','Nombre') || '',
+    cuit: pick(row,'cuit','CUIT') || '',
+    contacto: pick(row,'contacto','Contacto') || '',
+    telefono: pick(row,'telefono','Teléfono') || '',
+    email: pick(row,'email','Email') || '',
+    activo: normBool(pick(row,'activo','Activo'), true)
+  };
+}
+function mapItem(row) {
+  const tipo = pick(row,'tipo','Tipo') || 'consumible';
+  const stock = Number(pick(row,'stockActual','stock','Stock actual','Stock') ?? 0);
+  return {
+    id: row.id,
+    codigo: pick(row,'codigo','legacyId') || row.id,
+    nombre: pick(row,'nombre','Nombre') || '',
+    descripcion: pick(row,'descripcion','Descripción') || '',
+    tipo,
+    categoria: pick(row,'categoriaNombre','categoria','Categoría') || '',
+    categoriaId: pick(row,'categoriaId') || '',
+    unidad: pick(row,'unidad','Unidad') || 'unidad',
+    ubicacion: pick(row,'ubicacion','Ubicación') || '',
+    stock,
+    stockActual: stock,
+    stockMinimo: Number(pick(row,'stockMinimo','stockMin','Stock mínimo') ?? 0),
+    stockMaximo: Number(pick(row,'stockMaximo','stockMax','Stock máximo') ?? 0),
+    estado: pick(row,'estado','Estado') || (tipo === 'reutilizable' ? 'disponible' : ''),
+    nroPatrimonial: pick(row,'nroPatrimonial','Nro Patrimonial') || '',
+    nroSerie: pick(row,'nroSerie','Nro Serie') || '',
+    fechaVencimiento: toYmd(pick(row,'fechaVencimiento','Fecha Vencimiento')),
+    observaciones: pick(row,'observaciones','Observaciones') || '',
+    activo: normBool(pick(row,'activo','Activo'), true)
+  };
+}
+function mapMovement(row) {
+  return {
+    id: row.id,
+    fecha: toIso(pick(row,'fecha','createdAt')) || new Date().toISOString(),
+    tipo: pick(row,'tipo','Tipo') || '',
+    articuloId: pick(row,'itemId','articuloId') || '',
+    articuloNombre: pick(row,'articuloNombre','itemNombre','articulo') || '',
+    categoria: pick(row,'categoriaNombre','categoria') || '',
+    destinatario: pick(row,'destinatarioNombre','destinatario') || '',
+    cantidad: Number(pick(row,'cantidad') ?? 0),
+    proveedor: pick(row,'proveedorNombre','proveedor') || '',
+    usuario: pick(row,'usuarioNombre','usuarioUsername','usuario') || '',
+    observaciones: pick(row,'observaciones','detalle','proposito') || ''
+  };
+}
+function mapLoan(row) {
+  const fi = toDate(pick(row,'fechaPrestamo','fechaInicio','createdAt')) || new Date();
+  const fe = toDate(pick(row,'fechaDevolucionEsperada'));
+  const fr = toDate(pick(row,'fechaDevolucionReal'));
+  const vencido = !fr && fe ? fe < new Date() : false;
+  const diasTranscurridos = Math.max(0, Math.floor((Date.now() - fi.getTime()) / 86400000));
+  return {
+    id: row.id,
+    articuloId: pick(row,'itemId','articuloId') || '',
+    articuloNombre: pick(row,'itemNombre','articuloNombre','articulo') || '',
+    destinatario: pick(row,'destinatarioNombre','destinatario') || '',
+    fechaInicio: fi.toISOString(),
+    fechaDevolucionEsperada: toYmd(fe),
+    fechaDevolucionReal: toYmd(fr),
+    estado: pick(row,'estado') || (fr ? 'devuelto' : 'activo'),
+    vencido,
+    diasTranscurridos,
+    proposito: pick(row,'proposito') || '',
+    observaciones: pick(row,'observaciones') || ''
+  };
+}
+function mapAlert(row) {
+  return {
+    id: row.id,
+    tipo: pick(row,'tipo') || 'info',
+    nombre: pick(row,'itemNombre','nombre','titulo') || '',
+    detalle: pick(row,'detalle','mensaje') || '',
+    fecha: toIso(pick(row,'createdAt','fecha')) || new Date().toISOString(),
+    leida: normBool(pick(row,'leida'), false),
+    nivel: pick(row,'nivel') || ''
+  };
+}
+function mapUser(row) {
+  const email = pick(row,'email','Email') || '';
+  return {
+    id: row.id,
+    username: pick(row,'username') || (email ? email.split('@')[0] : row.id),
+    nombre: pick(row,'nombre','Nombre') || '',
+    rol: pick(row,'rol','Rol') || 'consulta',
+    email,
+    activo: normBool(pick(row,'activo','Activo'), true)
+  };
+}
+function mapAudit(row) {
+  return {
+    id: row.id,
+    fecha: toIso(pick(row,'createdAt','fecha')) || new Date().toISOString(),
+    accion: pick(row,'accion') || '',
+    detalle: typeof pick(row,'detalle') === 'string' ? pick(row,'detalle') : JSON.stringify(pick(row,'detalle') || {}),
+    usuario: pick(row,'usuarioNombre','usuarioUsername','usuario') || ''
+  };
+}
+function mapConfig(row) {
+  return {
+    nombreSistema: pick(row,'nombreSistema') || 'Sistema de Pañol',
+    institucion: pick(row,'nombreInstitucion','institucion') || 'UNSL',
+    emailAlertas: pick(row,'emailAlertas') || '',
+    diasVencimiento: Number(pick(row,'diasAvisoVencimiento','diasVencimiento') ?? 7),
+    diasPrestamo: Number(pick(row,'diasPrestamoDefault','diasPrestamo') ?? 3),
+  };
+}
+
+async function allDocs(name, clauses=[]) {
+  const ref = collection(db, name);
+  const snap = clauses.length ? await getDocs(query(ref, ...clauses)) : await getDocs(ref);
+  return snap.docs.map(withId);
+}
+async function addAudit(accion, detalle='') {
+  try {
+    if (!window.currentUser) return;
+    await addDoc(collection(db,'audit_logs'), {
+      accion,
+      detalle,
+      usuarioUid: window.currentUser.uid || '',
+      usuarioUsername: window.currentUser.username || window.currentUser.email || '',
+      usuarioNombre: window.currentUser.nombre || '',
+      createdAt: nowTs()
+    });
+  } catch (e) {
+    console.warn('Auditoría no registrada', e);
+  }
+}
+async function getSettingsDoc() {
+  const snap = await getDoc(doc(db,'settings','general'));
+  return snap.exists() ? mapConfig(snap.data()) : mapConfig({});
+}
+function csvEscape(v) {
+  const s = String(v ?? '');
+  return /[",
+;]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+function buildCsv(rows) {
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  return [headers.join(';'), ...rows.map(r => headers.map(h => csvEscape(r[h])).join(';'))].join('
+');
+}
+async function queryItems(data={}) {
+  let rows = (await allDocs('items')).map(mapItem);
+  const filtro = data.filtro || {};
+  if (filtro.activo !== undefined) rows = rows.filter(x => x.activo === filtro.activo);
+  if (filtro.tipo) rows = rows.filter(x => x.tipo === filtro.tipo);
+  if (filtro.categoria) rows = rows.filter(x => x.categoria === filtro.categoria);
+  return rows.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+}
+async function queryMovements(data={}) {
+  let rows = (await allDocs('movements')).map(mapMovement).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  const filtro = data.filtro || {};
+  if (filtro.limite) rows = rows.slice(0, filtro.limite);
+  return rows;
+}
+async function queryLoans() {
+  return (await allDocs('loans')).map(mapLoan);
+}
+async function createMovementRecord(payload) {
+  await addDoc(collection(db,'movements'), {
+    ...payload,
+    createdAt: nowTs()
+  });
+}
+async function createAlertIfNeeded(item, tipo, detalle) {
+  await addDoc(collection(db,'alerts'), {
+    tipo,
+    itemId: item.id,
+    itemNombre: item.nombre,
+    detalle,
+    leida: false,
+    createdAt: nowTs()
+  });
+}
+async function createSecondaryUser(email, password) {
+  const secondary = initializeApp(firebaseConfig, 'secondary-' + Date.now());
+  try {
+    const secondaryAuth = getAuth(secondary);
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    return cred.user.uid;
+  } finally {
+    await deleteApp(secondary);
+  }
+}
+
 window.loginFirebase = async function(email, password) {
   const userCredential = await signInWithEmailAndPassword(auth, email, password);
   const user = userCredential.user;
-
-  const docRef = doc(db, "users", user.uid);
-  const docSnap = await getDoc(docRef);
-
-  if (!docSnap.exists()) {
-    throw new Error("Usuario sin datos en Firestore.");
-  }
-
-  const data = docSnap.data();
-
-  if (!data.activo) {
-    throw new Error("Usuario inactivo.");
-  }
-
-  window.usuarioActual = {
-    uid: user.uid,
-    nombre: data.nombre,
-    email: data.email,
-    rol: data.rol
-  };
-
+  const snap = await getDoc(doc(db, 'users', user.uid));
+  if (!snap.exists()) throw new Error('Usuario sin datos en Firestore.');
+  const data = mapUser({ id: user.uid, ...snap.data() });
+  if (!data.activo) throw new Error('Usuario inactivo.');
+  window.usuarioActual = { uid: user.uid, ...data };
+  window.currentUser = window.usuarioActual;
   return window.usuarioActual;
 };
 
-window.firebaseLogout = async function() {
+window.doFirebaseLogout = async function() {
   await signOut(auth);
 };
 
-window.firebaseLoadBaseData = async function() {
-  const [catsSnap, staffSnap, suppliersSnap] = await Promise.all([
-    getDocs(query(collection(db, "categories"), where("activo", "==", true), orderBy("nombre"))),
-    getDocs(query(collection(db, "staff"), where("activo", "==", true), orderBy("apellido"))),
-    getDocs(collection(db, "suppliers"))
-  ]);
-
-  const categorias = catsSnap.docs.map(d => {
-    const x = d.data() || {};
-    return {
-      id: x.legacyId || d.id,
-      nombre: x.nombre || '',
-      descripcion: x.descripcion || '',
-      icono: x.icono || '📦',
-      activo: x.activo !== false
-    };
-  });
-
-  const personal = staffSnap.docs.map(d => {
-    const x = d.data() || {};
-    return {
-      id: x.legacyId || d.id,
-      nombre: x.nombre || '',
-      apellido: x.apellido || '',
-      cargo: x.cargo || '',
-      sector: x.sector || '',
-      telefono: x.telefono || '',
-      email: x.email || '',
-      activo: x.activo !== false
-    };
-  });
-
-  const proveedores = suppliersSnap.docs.map(d => {
-    const x = d.data() || {};
-    return {
-      id: x.legacyId || d.id,
-      nombre: x.nombre || '',
-      cuit: x.cuit || '',
-      contacto: x.contacto || '',
-      telefono: x.telefono || '',
-      email: x.email || '',
-      activo: x.activo !== false
-    };
-  }).filter(x => x.activo);
-
-  return { categorias, personal, proveedores };
-};
-
-window.firebaseLoadAlertCount = async function() {
-  const alertsSnap = await getDocs(
-    query(collection(db, "alerts"), where("leida", "==", false), limit(200))
-  );
-  return alertsSnap.size;
-};
-
-onAuthStateChanged(auth, async (user) => {
-  if (!user) return;
-  const docRef = doc(db, "users", user.uid);
-  const docSnap = await getDoc(docRef);
-  if (docSnap.exists()) {
-    window.usuarioActual = { uid: user.uid, ...docSnap.data() };
+window.firebaseCompatApi = async function(action, data={}) {
+  try {
+    switch(action) {
+      case 'getDashboard': {
+        const [items, loans, movements, alerts] = await Promise.all([
+          queryItems({ filtro:{ activo:true } }), queryLoans(), queryMovements({ filtro:{ limite:10 } }), allDocs('alerts')
+        ]);
+        const activeLoans = loans.filter(x => x.estado === 'activo');
+        const overdueLoans = activeLoans.filter(x => x.vencido);
+        const unreadAlerts = alerts.map(mapAlert).filter(x => !x.leida);
+        const crit = items.filter(x => x.tipo === 'consumible' && x.stock <= x.stockMinimo).length;
+        const movCat = {};
+        movements.forEach(m => { movCat[m.categoria || 'Sin categoría'] = (movCat[m.categoria || 'Sin categoría'] || 0) + 1; });
+        return {
+          success:true,
+          kpis:{
+            totalArticulos: items.length,
+            stockCritico: crit,
+            prestamosActivos: activeLoans.length,
+            prestamosVencidos: overdueLoans.length,
+            alertasPendientes: unreadAlerts.length
+          },
+          ultimosMovimientos: movements,
+          movimientosPorCategoria: movCat
+        };
+      }
+      case 'getCategorias': {
+        let categorias = (await allDocs('categories')).map(mapCategory);
+        if (data.soloActivas) categorias = categorias.filter(x => x.activo);
+        categorias.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+        return { success:true, categorias };
+      }
+      case 'saveCategoria': {
+        const payload = { nombre:data.nombre||'', descripcion:data.descripcion||'', icono:data.icono||'📦', activo:data.activo!==undefined?!!data.activo:true, updatedAt:nowTs() };
+        if (data.id) await updateDoc(doc(db,'categories',data.id), payload);
+        else { payload.createdAt = nowTs(); await addDoc(collection(db,'categories'), payload); }
+        await addAudit('SAVE_CATEGORIA', payload.nombre);
+        return { success:true, message:data.id?'Categoría actualizada':'Categoría creada' };
+      }
+      case 'getPersonal': {
+        let personal = (await allDocs('staff')).map(mapStaff);
+        if (data.soloActivos) personal = personal.filter(x => x.activo);
+        personal.sort((a,b)=>a.nombreCompleto.localeCompare(b.nombreCompleto,'es'));
+        return { success:true, personal };
+      }
+      case 'savePersonal': {
+        const payload = { nombre:data.nombre||'', apellido:data.apellido||'', nombreCompleto:[data.nombre||'',data.apellido||''].filter(Boolean).join(' '), cargo:data.cargo||'', sector:data.sector||'', telefono:data.telefono||'', activo:data.activo!==undefined?!!data.activo:true, updatedAt:nowTs() };
+        if (data.id) await updateDoc(doc(db,'staff',data.id), payload);
+        else { payload.createdAt = nowTs(); await addDoc(collection(db,'staff'), payload); }
+        await addAudit('SAVE_PERSONAL', payload.nombreCompleto);
+        return { success:true, message:data.id?'Personal actualizado':'Personal agregado' };
+      }
+      case 'getProveedores': {
+        let proveedores = (await allDocs('suppliers')).map(mapSupplier).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+        return { success:true, proveedores };
+      }
+      case 'saveProveedor': {
+        const payload = { nombre:data.nombre||'', cuit:data.cuit||'', contacto:data.contacto||'', telefono:data.telefono||'', email:data.email||'', activo:data.activo!==undefined?!!data.activo:true, updatedAt:nowTs() };
+        if (data.id) await updateDoc(doc(db,'suppliers',data.id), payload);
+        else { payload.createdAt = nowTs(); await addDoc(collection(db,'suppliers'), payload); }
+        await addAudit('SAVE_PROVEEDOR', payload.nombre);
+        return { success:true, message:data.id?'Proveedor actualizado':'Proveedor creado' };
+      }
+      case 'getAlertas': {
+        let alertas = (await allDocs('alerts')).map(mapAlert).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+        if (data.soloNoLeidas) alertas = alertas.filter(x => !x.leida);
+        return { success:true, alertas };
+      }
+      case 'marcarAlertaLeida': {
+        const all = await allDocs('alerts');
+        const targets = data.todas ? all.filter(x => !normBool(x.leida,false)) : all.filter(x => x.id === data.id);
+        for (const a of targets) await updateDoc(doc(db,'alerts',a.id), { leida:true, readAt:nowTs(), readByUid:window.currentUser?.uid||'' });
+        return { success:true };
+      }
+      case 'getArticulos': {
+        const articulos = await queryItems(data);
+        return { success:true, articulos };
+      }
+      case 'saveArticulo': {
+        const payload = {
+          nombre:data.nombre||'',
+          descripcion:data.descripcion||'',
+          tipo:data.tipo||'consumible',
+          categoriaNombre:data.categoria||'',
+          categoria:data.categoria||'',
+          unidad:data.unidad||'unidad',
+          ubicacion:data.ubicacion||'',
+          nroPatrimonial:data.nroPatrimonial||'',
+          nroSerie:data.nroSerie||'',
+          fechaVencimiento:data.fechaVencimiento||'',
+          observaciones:data.observaciones||'',
+          activo:true,
+          updatedAt:nowTs()
+        };
+        if (payload.tipo === 'consumible') {
+          payload.stockActual = Number(data.stockInicial ?? data.stockActual ?? 0);
+          payload.stockMinimo = Number(data.stockMinimo ?? 0);
+          payload.stockMaximo = Number(data.stockMaximo ?? 0);
+        } else {
+          payload.estado = data.estado || 'disponible';
+        }
+        if (data.id) await updateDoc(doc(db,'items',data.id), payload);
+        else { payload.createdAt = nowTs(); await addDoc(collection(db,'items'), payload); }
+        await addAudit('SAVE_ARTICULO', payload.nombre);
+        return { success:true, message:data.id?'Artículo actualizado':'Artículo creado' };
+      }
+      case 'deleteArticulo': {
+        await updateDoc(doc(db,'items',data.id), { activo:false, updatedAt:nowTs() });
+        await addAudit('DELETE_ARTICULO', data.id || '');
+        return { success:true, message:'Artículo desactivado' };
+      }
+      case 'getMovimientos': {
+        const movimientos = await queryMovements(data);
+        return { success:true, movimientos };
+      }
+      case 'saveMovimiento': {
+        const itemSnap = await getDoc(doc(db,'items',data.articuloId));
+        if (!itemSnap.exists()) return { success:false, error:'Artículo no encontrado' };
+        const item = mapItem({ id:itemSnap.id, ...itemSnap.data() });
+        const tipo = data.tipo;
+        const cantidad = Number(data.cantidad || 1);
+        if (item.tipo === 'consumible') {
+          let nuevoStock = item.stock;
+          if (tipo === 'ingreso') nuevoStock += cantidad;
+          if (tipo === 'entrega') nuevoStock -= cantidad;
+          if (nuevoStock < 0) return { success:false, error:'Stock insuficiente' };
+          await updateDoc(doc(db,'items',item.id), { stockActual:nuevoStock, updatedAt:nowTs() });
+          item.stock = nuevoStock;
+          if (nuevoStock === 0) await createAlertIfNeeded(item, 'stock_cero', 'Stock agotado');
+          else if (nuevoStock <= item.stockMinimo) await createAlertIfNeeded(item, 'stock_minimo', 'Stock en mínimo');
+        } else {
+          if (tipo === 'prestamo') {
+            if (item.estado && item.estado !== 'disponible') return { success:false, error:'El artículo no está disponible' };
+            await updateDoc(doc(db,'items',item.id), { estado:'prestado', updatedAt:nowTs() });
+            await addDoc(collection(db,'loans'), {
+              itemId:item.id,
+              itemNombre:item.nombre,
+              destinatarioNombre:data.destinatario||'',
+              fechaPrestamo:data.fechaPrestamo ? Timestamp.fromDate(new Date(data.fechaPrestamo)) : nowTs(),
+              fechaDevolucionEsperada:data.fechaDevolucionEsperada ? Timestamp.fromDate(new Date(data.fechaDevolucionEsperada)) : null,
+              proposito:data.proposito||'',
+              observaciones:data.observaciones||'',
+              estado:'activo',
+              createdAt:nowTs(),
+              updatedAt:nowTs()
+            });
+          }
+        }
+        await createMovementRecord({
+          tipo,
+          itemId:item.id,
+          itemNombre:item.nombre,
+          categoriaNombre:item.categoria,
+          destinatarioNombre:data.destinatario||'',
+          cantidad,
+          proveedorNombre:data.proveedor||'',
+          usuarioNombre:window.currentUser?.nombre||'',
+          usuarioUsername:window.currentUser?.username||'',
+          observaciones:data.observaciones||data.proposito||''
+        });
+        await addAudit('SAVE_MOVIMIENTO', `${tipo} - ${item.nombre}`);
+        return { success:true, message:'Movimiento registrado' };
+      }
+      case 'getPrestamosActivos': {
+        const prestamos = (await queryLoans()).filter(x => x.estado === 'activo').sort((a,b)=>new Date(b.fechaInicio)-new Date(a.fechaInicio));
+        return { success:true, prestamos };
+      }
+      case 'registrarDevolucion': {
+        const loanSnap = await getDoc(doc(db,'loans',data.prestamoId));
+        if (!loanSnap.exists()) return { success:false, error:'Préstamo no encontrado' };
+        const loan = { id:loanSnap.id, ...loanSnap.data() };
+        const newState = data.novedad ? (data.estadoHerramienta || 'en_reparacion') : 'disponible';
+        await updateDoc(doc(db,'loans',data.prestamoId), {
+          estado:'devuelto',
+          fechaDevolucionReal: nowTs(),
+          observaciones:data.observaciones||pick(loan,'observaciones')||'',
+          updatedAt:nowTs()
+        });
+        await updateDoc(doc(db,'items',pick(loan,'itemId')), { estado:newState, updatedAt:nowTs() });
+        await createMovementRecord({
+          tipo:'devolucion',
+          itemId:pick(loan,'itemId'),
+          itemNombre:pick(loan,'itemNombre','articuloNombre') || '',
+          categoriaNombre:'',
+          destinatarioNombre:pick(loan,'destinatarioNombre','destinatario') || '',
+          cantidad:1,
+          proveedorNombre:'',
+          usuarioNombre:window.currentUser?.nombre||'',
+          usuarioUsername:window.currentUser?.username||'',
+          observaciones:data.observaciones||''
+        });
+        await addAudit('DEVOLUCION', pick(loan,'itemNombre','articuloNombre')||'');
+        return { success:true, message:'Devolución registrada' };
+      }
+      case 'cambiarEstado': {
+        await updateDoc(doc(db,'items',data.articuloId), { estado:data.nuevoEstado, observaciones:data.observaciones||'', updatedAt:nowTs() });
+        const itemSnap = await getDoc(doc(db,'items',data.articuloId));
+        const item = mapItem({ id:itemSnap.id, ...itemSnap.data() });
+        await createMovementRecord({
+          tipo:'cambio_estado',
+          itemId:item.id,
+          itemNombre:item.nombre,
+          categoriaNombre:item.categoria,
+          destinatarioNombre:'',
+          cantidad:1,
+          proveedorNombre:'',
+          usuarioNombre:window.currentUser?.nombre||'',
+          usuarioUsername:window.currentUser?.username||'',
+          observaciones:data.observaciones||''
+        });
+        await addAudit('CAMBIO_ESTADO', `${item.nombre} -> ${data.nuevoEstado}`);
+        return { success:true, message:'Estado actualizado' };
+      }
+      case 'getUsuarios': {
+        const usuarios = (await allDocs('users')).map(mapUser).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+        return { success:true, usuarios };
+      }
+      case 'saveUsuario': {
+        if (!data.email) return { success:false, error:'El email es obligatorio en Firebase' };
+        if (data.id) {
+          await updateDoc(doc(db,'users',data.id), {
+            username:data.username || data.email.split('@')[0],
+            nombre:data.nombre || '',
+            rol:data.rol || 'consulta',
+            email:data.email || '',
+            activo:data.activo!==undefined?!!data.activo:true,
+            updatedAt:nowTs()
+          });
+          await addAudit('SAVE_USUARIO', data.email);
+          return { success:true, message:data.password ? 'Usuario actualizado. La contraseña no se modificó desde el front.' : 'Usuario actualizado' };
+        }
+        if (!data.password) return { success:false, error:'Para crear un usuario nuevo necesitás contraseña' };
+        const uid = await createSecondaryUser(data.email, data.password);
+        await setDoc(doc(db,'users',uid), {
+          username:data.username || data.email.split('@')[0],
+          nombre:data.nombre || '',
+          rol:data.rol || 'consulta',
+          email:data.email || '',
+          activo:true,
+          createdAt:nowTs(),
+          updatedAt:nowTs()
+        });
+        await addAudit('CREATE_USUARIO', data.email);
+        return { success:true, message:'Usuario creado' };
+      }
+      case 'getConfig': {
+        return { success:true, config: await getSettingsDoc() };
+      }
+      case 'saveConfig': {
+        await setDoc(doc(db,'settings','general'), {
+          nombreSistema:data.nombreSistema||'Sistema de Pañol',
+          nombreInstitucion:data.institucion||'UNSL',
+          emailAlertas:data.emailAlertas||'',
+          diasAvisoVencimiento:Number(data.diasVencimiento ?? 7),
+          diasPrestamoDefault:Number(data.diasPrestamo ?? 3),
+          updatedAt:nowTs()
+        }, { merge:true });
+        await addAudit('SAVE_CONFIG', 'Configuración general');
+        return { success:true, message:'Configuración guardada' };
+      }
+      case 'getAuditoria': {
+        const logs = (await allDocs('audit_logs')).map(mapAudit).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).slice(0,200);
+        return { success:true, logs };
+      }
+      case 'getReportes': {
+        const tipo = data.tipo || '';
+        const items = await queryItems({ filtro:{} });
+        const loans = await queryLoans();
+        const movs = await queryMovements({ filtro:{} });
+        let rows = [];
+        if (tipo === 'stock_categoria') {
+          const grp = {};
+          items.forEach(i => { grp[i.categoria||'Sin categoría'] = (grp[i.categoria||'Sin categoría'] || 0) + (i.tipo==='consumible' ? i.stock : 1); });
+          rows = Object.entries(grp).map(([categoria,total]) => ({ categoria, total }));
+        } else if (tipo === 'stock_critico') {
+          rows = items.filter(i => i.tipo==='consumible' && i.stock <= i.stockMinimo).map(i => ({ nombre:i.nombre, categoria:i.categoria, stock:i.stock, minimo:i.stockMinimo }));
+        } else if (tipo === 'prestamos_activos') {
+          rows = loans.filter(l => l.estado==='activo').map(l => ({ articulo:l.articuloNombre, destinatario:l.destinatario, fechaInicio:l.fechaInicio, fechaDevolucionEsperada:l.fechaDevolucionEsperada, proposito:l.proposito }));
+        } else if (tipo === 'prestamos_vencidos') {
+          rows = loans.filter(l => l.estado==='activo' && l.vencido).map(l => ({ articulo:l.articuloNombre, destinatario:l.destinatario, diasVencido:l.diasTranscurridos, fechaDevolucionEsperada:l.fechaDevolucionEsperada }));
+        } else if (tipo === 'top_articulos') {
+          const grp = {};
+          movs.forEach(m => { if (m.articuloNombre) grp[m.articuloNombre] = (grp[m.articuloNombre] || 0) + 1; });
+          rows = Object.entries(grp).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([articulo,total]) => ({ articulo, total }));
+        } else if (tipo === 'sin_movimiento') {
+          const cutoff = Date.now() - 60*86400000;
+          const used = new Set(movs.filter(m => new Date(m.fecha).getTime() >= cutoff).map(m => m.articuloId));
+          rows = items.filter(i => !used.has(i.id)).map(i => ({ articulo:i.nombre, categoria:i.categoria, ubicacion:i.ubicacion }));
+        } else if (tipo === 'multiples_prestamos') {
+          const grp = {};
+          loans.filter(l => l.estado==='activo').forEach(l => { grp[l.destinatario] = (grp[l.destinatario] || 0) + 1; });
+          rows = Object.entries(grp).filter(([,c])=>c>1).map(([destinatario,total])=>({ destinatario,total }));
+        } else if (tipo === 'movimientos_periodo') {
+          rows = movs.map(m => ({ fecha:m.fecha, tipo:m.tipo, articulo:m.articuloNombre, categoria:m.categoria, destinatario:m.destinatario, cantidad:m.cantidad, usuario:m.usuario }));
+        }
+        return { success:true, rows, html: rows.length ? '<pre style="white-space:pre-wrap;font-size:12px">' + JSON.stringify(rows.slice(0,50), null, 2) + '</pre>' : '<div class="card"><p>Sin datos</p></div>' };
+      }
+      case 'exportCSV': {
+        const rep = await window.firebaseCompatApi('getReportes', { tipo:data.tipo });
+        return { success:true, csv: buildCsv(rep.rows || []), filename: `${data.tipo || 'reporte'}.csv` };
+      }
+      default:
+        return { success:false, error:'Acción Firebase no implementada: ' + action };
+    }
+  } catch (e) {
+    console.error('firebaseCompatApi', action, e);
+    return { success:false, error:e.message || String(e) };
   }
-});
+};
+
+window.firebaseReady = Promise.resolve(true);
+window._firebaseDb = db;
+window._firebaseAuth = auth;
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
@@ -470,14 +957,7 @@ const MENU = [
 // API
 // ================================================================
 async function api(action, data={}) {
-  try {
-    const res = await fetch(API_URL, {
-      method:'POST',
-      body: new URLSearchParams({ action, data: JSON.stringify(data) }),
-      redirect:'follow'
-    });
-    return await res.json();
-  } catch(e) { return { success:false, error:'Error de conexión: '+e.message }; }
+  return await window.firebaseCompatApi(action, data);
 }
 
 // ================================================================
@@ -497,8 +977,8 @@ async function doLogin() {
     currentUser = window.usuarioActual;
     sessionStorage.setItem('panol_user', JSON.stringify(currentUser));
     await initApp();
-  } catch (error) {
-    showLoginError(error.message || 'Credenciales incorrectas');
+  } catch(e) {
+    showLoginError(e.message || 'Credenciales incorrectas');
   } finally {
     btn.disabled = false;
     document.getElementById('login-btn-text').textContent = 'Ingresar al Sistema';
@@ -507,10 +987,8 @@ async function doLogin() {
 function showLoginError(msg) { const el=document.getElementById('login-error'); el.textContent=msg; el.style.display='block'; }
 async function doLogout() {
   if (!confirm('¿Cerrar sesión?')) return;
-  try { await window.firebaseLogout(); } catch (e) { console.warn('No se pudo cerrar sesión en Firebase:', e); }
-  currentUser = null;
-  window.usuarioActual = null;
-  sessionStorage.removeItem('panol_user');
+  try { await window.doFirebaseLogout(); } catch(e) { console.warn(e); }
+  currentUser=null; window.usuarioActual=null; sessionStorage.removeItem('panol_user');
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('login-user').value='';
@@ -548,35 +1026,21 @@ function buildMenu() {
   });
 }
 async function loadBaseData() {
-  try {
-    const base = await window.firebaseLoadBaseData();
-    appData.categorias = base.categorias || [];
-    appData.personal = base.personal || [];
-    appData.proveedores = (base.proveedores || []).filter(x => x.activo !== false);
-  } catch (e) {
-    console.error('Error cargando datos base desde Firebase:', e);
-    toast('No se pudieron cargar categorías, personal o proveedores desde Firebase','error');
-    appData.categorias = [];
-    appData.personal = [];
-    appData.proveedores = [];
-  }
+  const [c,p,pv] = await Promise.all([
+    api('getCategorias',{soloActivas:true}),
+    api('getPersonal',  {soloActivos:true}),
+    api('getProveedores')
+  ]);
+  if (c.success)  appData.categorias  = c.categorias;
+  if (p.success)  appData.personal    = p.personal;
+  if (pv.success) appData.proveedores = pv.proveedores.filter(x=>x.activo);
 }
 async function loadAlertCount() {
-  try {
-    alertCount = await window.firebaseLoadAlertCount();
+  const res = await api('getAlertas', { soloNoLeidas:true });
+  if (res.success) {
+    alertCount = res.alertas.length;
     const b = document.getElementById('badge-alertas');
-    if (b) {
-      b.textContent = alertCount;
-      b.style.display = alertCount > 0 ? 'inline-block' : 'none';
-    }
-  } catch (e) {
-    console.error('Error cargando alertas desde Firebase:', e);
-    alertCount = 0;
-    const b = document.getElementById('badge-alertas');
-    if (b) {
-      b.textContent = '0';
-      b.style.display = 'none';
-    }
+    if (b) { b.textContent=alertCount; b.style.display=alertCount>0?'inline-block':'none'; }
   }
 }
 
