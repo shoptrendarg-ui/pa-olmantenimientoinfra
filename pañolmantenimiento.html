@@ -671,15 +671,26 @@ function mrRenderOpts(q) {
   if (!dd) return;
   const opts = window._mrOpts || [];
   const filtered = q ? opts.filter(o => o.nombre.toLowerCase().includes(q.toLowerCase())) : opts;
+  // Store filtered list for index-based access
+  window._mrFiltered = filtered;
   if (!filtered.length) {
     dd.innerHTML = `<div class="art-no-results">${q ? 'Sin resultados para "'+q+'"' : 'Sin artículos disponibles'}</div>`;
   } else {
-    dd.innerHTML = filtered.map(o =>
-      `<div class="art-option" onmousedown="event.preventDefault(); mrSelectArt('${o.id}',${JSON.stringify(o.nombre)},${JSON.stringify(o.meta)})">
+    dd.innerHTML = filtered.map((o, i) =>
+      `<div class="art-option" data-idx="${i}">
         <span class="art-option-name">${o.nombre}</span>
         <span class="art-option-meta">${o.meta}</span>
       </div>`
     ).join('');
+    // Attach events via JS (no inline handlers = no escaping issues)
+    dd.querySelectorAll('.art-option').forEach(el => {
+      el.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        const idx = parseInt(this.dataset.idx);
+        const item = window._mrFiltered[idx];
+        if (item) mrSelectArt(item.id, item.nombre, item.meta);
+      });
+    });
   }
 }
 
