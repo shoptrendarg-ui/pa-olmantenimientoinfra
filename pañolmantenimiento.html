@@ -1,6 +1,64 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBxtbTZmNzxSh9YBWIwrGx0_i8x4LLFeHY",
+  authDomain: "inventario-mantenimiento-unsl.firebaseapp.com",
+  projectId: "inventario-mantenimiento-unsl",
+  storageBucket: "inventario-mantenimiento-unsl.firebasestorage.app",
+  messagingSenderId: "826226646451",
+  appId: "1:826226646451:web:25ca28cb15a3dbf7603fc6"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+window.loginFirebase = async function(email, password) {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
+
+  const docRef = doc(db, "users", user.uid);
+  const docSnap = await getDoc(docRef);
+
+  if (!docSnap.exists()) {
+    throw new Error("Usuario sin datos en Firestore.");
+  }
+
+  const data = docSnap.data();
+
+  if (!data.activo) {
+    throw new Error("Usuario inactivo.");
+  }
+
+  window.usuarioActual = {
+    uid: user.uid,
+    nombre: data.nombre,
+    email: data.email,
+    rol: data.rol
+  };
+
+  return window.usuarioActual;
+};
+
+window.firebaseLogout = async function() {
+  await signOut(auth);
+};
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) return;
+  const docRef = doc(db, "users", user.uid);
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    window.usuarioActual = { uid: user.uid, ...docSnap.data() };
+  }
+});
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Sistema de Pañol — UNSL</title>
@@ -259,7 +317,7 @@ textarea.form-control { resize:vertical; min-height:80px; }
       <p>Subsecretaría de Infraestructura · UNSL</p>
     </div>
     <div class="login-error" id="login-error"></div>
-    <div class="login-field"><label>Usuario</label><input type="text" id="login-user" placeholder="usuario" autocomplete="username"></div>
+    <div class="login-field"><label>Email</label><input type="email" id="login-user" placeholder="tuemail@gmail.com" autocomplete="username"></div>
     <div class="login-field"><label>Contraseña</label><input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
     <button class="login-btn" id="login-btn" onclick="doLogin()"><span id="login-btn-text">Ingresar al Sistema</span></button>
   </div>
@@ -371,27 +429,33 @@ async function api(action, data={}) {
 // AUTH
 // ================================================================
 async function doLogin() {
-  const username = document.getElementById('login-user').value.trim();
+  const email = document.getElementById('login-user').value.trim();
   const password = document.getElementById('login-pass').value;
   const btn = document.getElementById('login-btn');
   const errEl = document.getElementById('login-error');
-  if (!username || !password) { showLoginError('Ingresá usuario y contraseña'); return; }
+  if (!email || !password) { showLoginError('Ingresá email y contraseña'); return; }
   btn.disabled = true;
   document.getElementById('login-btn-text').innerHTML = '<div class="spinner"></div>';
   errEl.style.display = 'none';
-  const res = await api('login', { username, password });
-  btn.disabled = false;
-  document.getElementById('login-btn-text').textContent = 'Ingresar al Sistema';
-  if (res.success) {
-    currentUser = res.user;
-    sessionStorage.setItem('panol_user', JSON.stringify(res.user));
-    initApp();
-  } else showLoginError(res.error || 'Credenciales incorrectas');
+  try {
+    await window.loginFirebase(email, password);
+    currentUser = window.usuarioActual;
+    sessionStorage.setItem('panol_user', JSON.stringify(currentUser));
+    await initApp();
+  } catch (error) {
+    showLoginError(error.message || 'Credenciales incorrectas');
+  } finally {
+    btn.disabled = false;
+    document.getElementById('login-btn-text').textContent = 'Ingresar al Sistema';
+  }
 }
 function showLoginError(msg) { const el=document.getElementById('login-error'); el.textContent=msg; el.style.display='block'; }
-function doLogout() {
+async function doLogout() {
   if (!confirm('¿Cerrar sesión?')) return;
-  currentUser=null; sessionStorage.removeItem('panol_user');
+  try { await window.firebaseLogout(); } catch (e) { console.warn('No se pudo cerrar sesión en Firebase:', e); }
+  currentUser = null;
+  window.usuarioActual = null;
+  sessionStorage.removeItem('panol_user');
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('login-user').value='';
