@@ -4,7 +4,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, collection, getDocs, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBxtbTZmNzxSh9YBWIwrGx0_i8x4LLFeHY",
@@ -48,6 +48,61 @@ window.loginFirebase = async function(email, password) {
 
 window.firebaseLogout = async function() {
   await signOut(auth);
+};
+
+window.firebaseLoadBaseData = async function() {
+  const [catsSnap, staffSnap, suppliersSnap] = await Promise.all([
+    getDocs(query(collection(db, "categories"), where("activo", "==", true), orderBy("nombre"))),
+    getDocs(query(collection(db, "staff"), where("activo", "==", true), orderBy("apellido"))),
+    getDocs(collection(db, "suppliers"))
+  ]);
+
+  const categorias = catsSnap.docs.map(d => {
+    const x = d.data() || {};
+    return {
+      id: x.legacyId || d.id,
+      nombre: x.nombre || '',
+      descripcion: x.descripcion || '',
+      icono: x.icono || '📦',
+      activo: x.activo !== false
+    };
+  });
+
+  const personal = staffSnap.docs.map(d => {
+    const x = d.data() || {};
+    return {
+      id: x.legacyId || d.id,
+      nombre: x.nombre || '',
+      apellido: x.apellido || '',
+      cargo: x.cargo || '',
+      sector: x.sector || '',
+      telefono: x.telefono || '',
+      email: x.email || '',
+      activo: x.activo !== false
+    };
+  });
+
+  const proveedores = suppliersSnap.docs.map(d => {
+    const x = d.data() || {};
+    return {
+      id: x.legacyId || d.id,
+      nombre: x.nombre || '',
+      cuit: x.cuit || '',
+      contacto: x.contacto || '',
+      telefono: x.telefono || '',
+      email: x.email || '',
+      activo: x.activo !== false
+    };
+  }).filter(x => x.activo);
+
+  return { categorias, personal, proveedores };
+};
+
+window.firebaseLoadAlertCount = async function() {
+  const alertsSnap = await getDocs(
+    query(collection(db, "alerts"), where("leida", "==", false), limit(200))
+  );
+  return alertsSnap.size;
 };
 
 onAuthStateChanged(auth, async (user) => {
@@ -493,21 +548,35 @@ function buildMenu() {
   });
 }
 async function loadBaseData() {
-  const [c,p,pv] = await Promise.all([
-    api('getCategorias',{soloActivas:true}),
-    api('getPersonal',  {soloActivos:true}),
-    api('getProveedores')
-  ]);
-  if (c.success)  appData.categorias  = c.categorias;
-  if (p.success)  appData.personal    = p.personal;
-  if (pv.success) appData.proveedores = pv.proveedores.filter(x=>x.activo);
+  try {
+    const base = await window.firebaseLoadBaseData();
+    appData.categorias = base.categorias || [];
+    appData.personal = base.personal || [];
+    appData.proveedores = (base.proveedores || []).filter(x => x.activo !== false);
+  } catch (e) {
+    console.error('Error cargando datos base desde Firebase:', e);
+    toast('No se pudieron cargar categorías, personal o proveedores desde Firebase','error');
+    appData.categorias = [];
+    appData.personal = [];
+    appData.proveedores = [];
+  }
 }
 async function loadAlertCount() {
-  const res = await api('getAlertas', { soloNoLeidas:true });
-  if (res.success) {
-    alertCount = res.alertas.length;
+  try {
+    alertCount = await window.firebaseLoadAlertCount();
     const b = document.getElementById('badge-alertas');
-    if (b) { b.textContent=alertCount; b.style.display=alertCount>0?'inline-block':'none'; }
+    if (b) {
+      b.textContent = alertCount;
+      b.style.display = alertCount > 0 ? 'inline-block' : 'none';
+    }
+  } catch (e) {
+    console.error('Error cargando alertas desde Firebase:', e);
+    alertCount = 0;
+    const b = document.getElementById('badge-alertas');
+    if (b) {
+      b.textContent = '0';
+      b.style.display = 'none';
+    }
   }
 }
 
