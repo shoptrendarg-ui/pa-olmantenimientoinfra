@@ -225,8 +225,32 @@ function buildCsv(rows) {
   const headers = Object.keys(rows[0]);
   return [headers.join(';'), ...rows.map(r => headers.map(h => csvEscape(r[h])).join(';'))].join('\n');
 }
+function normalizeKey(v) {
+  return String(v || '').trim().toLowerCase();
+}
+function buildCategoryResolver(categories) {
+  const byId = new Map();
+  const byName = new Map();
+  categories.forEach(c => {
+    const mapped = mapCategory(c);
+    if (mapped.id) byId.set(mapped.id, mapped.nombre || '');
+    if (mapped.legacyId) byId.set(mapped.legacyId, mapped.nombre || '');
+    if (mapped.nombre) byName.set(normalizeKey(mapped.nombre), mapped.nombre);
+  });
+  return function resolveCategory(item) {
+    const rawName = item.categoria || item.categoriaNombre || '';
+    const rawId = item.categoriaId || '';
+    return byId.get(rawId) || byName.get(normalizeKey(rawName)) || rawName || 'Sin categoría';
+  };
+}
 async function queryItems(data={}) {
-  let rows = (await allDocs('items')).map(mapItem);
+  const [itemDocs, categoryDocs] = await Promise.all([allDocs('items'), allDocs('categories')]);
+  const resolveCategory = buildCategoryResolver(categoryDocs);
+  let rows = itemDocs.map(row => {
+    const mapped = mapItem(row);
+    mapped.categoria = resolveCategory(mapped);
+    return mapped;
+  });
   const filtro = data.filtro || {};
   if (filtro.activo !== undefined) rows = rows.filter(x => x.activo === filtro.activo);
   if (filtro.tipo) rows = rows.filter(x => x.tipo === filtro.tipo);
@@ -324,6 +348,14 @@ window.firebaseCompatApi = async function(action, data={}) {
         await addAudit('SAVE_CATEGORIA', payload.nombre);
         return { success:true, message:data.id?'Categoría actualizada':'Categoría creada' };
       }
+      case 'deleteCategoria': {
+        const items = await queryItems({});
+        const linked = items.filter(i => i.activo && (i.categoriaId === data.id || normalizeKey(i.categoria) === normalizeKey(data.nombre)));
+        if (linked.length) return { success:false, error:`No se puede eliminar: hay ${linked.length} artículo(s) usando esta categoría` };
+        await deleteDoc(doc(db,'categories',data.id));
+        await addAudit('DELETE_CATEGORIA', data.nombre || data.id || '');
+        return { success:true, message:'Categoría eliminada' };
+      }
       case 'getPersonal': {
         let personal = (await allDocs('staff')).map(mapStaff);
         if (data.soloActivos) personal = personal.filter(x => x.activo);
@@ -337,6 +369,11 @@ window.firebaseCompatApi = async function(action, data={}) {
         await addAudit('SAVE_PERSONAL', payload.nombreCompleto);
         return { success:true, message:data.id?'Personal actualizado':'Personal agregado' };
       }
+      case 'deletePersonal': {
+        await deleteDoc(doc(db,'staff',data.id));
+        await addAudit('DELETE_PERSONAL', data.nombre || data.id || '');
+        return { success:true, message:'Personal eliminado' };
+      }
       case 'getProveedores': {
         let proveedores = (await allDocs('suppliers')).map(mapSupplier).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
         return { success:true, proveedores };
@@ -347,6 +384,11 @@ window.firebaseCompatApi = async function(action, data={}) {
         else { payload.createdAt = nowTs(); await addDoc(collection(db,'suppliers'), payload); }
         await addAudit('SAVE_PROVEEDOR', payload.nombre);
         return { success:true, message:data.id?'Proveedor actualizado':'Proveedor creado' };
+      }
+      case 'deleteProveedor': {
+        await deleteDoc(doc(db,'suppliers',data.id));
+        await addAudit('DELETE_PROVEEDOR', data.nombre || data.id || '');
+        return { success:true, message:'Proveedor eliminado' };
       }
       case 'getAlertas': {
         let alertas = (await allDocs('alerts')).map(mapAlert).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
@@ -1476,6 +1518,7 @@ function filtrarCatalogo() {
           <div style="display:flex;gap:4px">
             <button class="btn btn-outline btn-sm btn-icon" onclick="openModalEditarArticulo('${a.id}')" title="Editar">✏️</button>
             <button class="btn btn-outline btn-sm btn-icon" onclick="openModalCambiarEstado('${a.id}','${escHtml(a.nombre)}')" title="Estado">🔄</button>
+            <button class="btn btn-outline btn-sm btn-icon" onclick="eliminarArticulo('${a.id}','${escJs(a.nombre)}')" title="Eliminar">🗑️</button>
           </div>
         ` : ''}
       </td>
@@ -1483,6 +1526,15 @@ function filtrarCatalogo() {
   `).join('') || `<tr><td colspan="7" class="table-empty">Sin artículos para ese filtro</td></tr>`;
 
   document.getElementById('catalogo-body').innerHTML = rows;
+}
+
+async function eliminarArticulo(id, nombre) {
+  if (!confirm(`¿Eliminar/desactivar el artículo "${nombre || ''}"?`)) return;
+  const res = await api('deleteArticulo', { id });
+  if (res.success) {
+    toast(res.message || 'Artículo eliminado','success');
+    renderCatalogo();
+  } else toast(res.error || 'No se pudo eliminar','error');
 }
 
 // ================================================================
@@ -1928,7 +1980,7 @@ async function renderPersonal() {
     <td data-label="Sector">${p.sector||'—'}</td>
     <td data-label="Teléfono">${p.telefono||'—'}</td>
     <td data-label="Estado"><span class="badge ${p.activo?'badge-success':'badge-gray'}">${p.activo?'Activo':'Inactivo'}</span></td>
-    <td data-label="Acciones"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalPersonal(${JSON.stringify(p)})'>✏️</button></td>
+    <td data-label="Acciones"><div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalPersonal(${JSON.stringify(p)})' title="Editar">✏️</button><button class="btn btn-outline btn-sm btn-icon" onclick='eliminarPersonal(${JSON.stringify(p.id)}, ${JSON.stringify((p.nombre||'') + ' ' + (p.apellido||''))})' title="Eliminar">🗑️</button></div></td>
   </tr>`).join('')||`<tr><td colspan="6" class="table-empty">Sin personal registrado</td></tr>`;
   showPage(`<div class="card">
     <div class="card-header"><div><div class="card-title">Personal de Mantenimiento (${res.personal.length})</div><div class="card-subtitle">Aparecen como destinatarios en entregas y préstamos</div></div></div>
@@ -1956,8 +2008,20 @@ function openModalPersonal(p) {
       if (res.success) { toast(res.message,'success'); closeModal(); await loadBaseData(); renderPersonal(); }
       else toast(res.error,'error');
     }},
+    ...(!esNuevo ? [{ label:'Eliminar', class:'btn-danger', fn:()=>eliminarPersonal(p.id, `${p.nombre||''} ${p.apellido||''}`.trim(), true) }] : []),
     { label:'Cancelar', class:'btn-outline', fn:closeModal }
   ]);
+}
+
+async function eliminarPersonal(id, nombre, desdeModal=false) {
+  if (!confirm(`¿Eliminar a ${nombre || 'este registro'}? Esta acción no se puede deshacer.`)) return;
+  const res = await api('deletePersonal', { id, nombre });
+  if (res.success) {
+    toast(res.message,'success');
+    if (desdeModal) closeModal();
+    await loadBaseData();
+    renderPersonal();
+  } else toast(res.error || 'No se pudo eliminar','error');
 }
 
 // ================================================================
@@ -1972,7 +2036,7 @@ async function renderCategorias() {
     <td data-label="Nombre"><strong>${c.nombre}</strong></td>
     <td data-label="Descripción">${c.descripcion||'—'}</td>
     <td data-label="Estado"><span class="badge ${c.activo?'badge-success':'badge-gray'}">${c.activo?'Activa':'Inactiva'}</span></td>
-    <td data-label="Acciones"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalCategoria(${JSON.stringify(c)})'>✏️</button></td>
+    <td data-label="Acciones"><div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalCategoria(${JSON.stringify(c)})' title="Editar">✏️</button><button class="btn btn-outline btn-sm btn-icon" onclick='eliminarCategoria(${JSON.stringify(c.id)}, ${JSON.stringify(c.nombre)})' title="Eliminar">🗑️</button></div></td>
   </tr>`).join('')||`<tr><td colspan="5" class="table-empty">Sin categorías</td></tr>`;
   showPage(`<div class="card">
     <div class="card-header"><div class="card-title">Categorías (${res.categorias.length})</div></div>
@@ -1998,8 +2062,20 @@ function openModalCategoria(c) {
       if (res.success) { toast(res.message,'success'); closeModal(); await loadBaseData(); renderCategorias(); }
       else toast(res.error,'error');
     }},
+    ...(!esNueva ? [{ label:'Eliminar', class:'btn-danger', fn:()=>eliminarCategoria(c.id, c.nombre, true) }] : []),
     { label:'Cancelar', class:'btn-outline', fn:closeModal }
   ]);
+}
+
+async function eliminarCategoria(id, nombre, desdeModal=false) {
+  if (!confirm(`¿Eliminar la categoría "${nombre || ''}"?`)) return;
+  const res = await api('deleteCategoria', { id, nombre });
+  if (res.success) {
+    toast(res.message,'success');
+    if (desdeModal) closeModal();
+    await loadBaseData();
+    renderCategorias();
+  } else toast(res.error || 'No se pudo eliminar','error');
 }
 
 // ================================================================
@@ -2016,7 +2092,7 @@ async function renderProveedores() {
     <td data-label="Teléfono">${p.telefono||'—'}</td>
     <td data-label="Email">${p.email||'—'}</td>
     <td data-label="Estado"><span class="badge ${p.activo?'badge-success':'badge-gray'}">${p.activo?'Activo':'Inactivo'}</span></td>
-    <td data-label="Acciones"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalProveedor(${JSON.stringify(p)})'>✏️</button></td>
+    <td data-label="Acciones"><div style="display:flex;gap:6px"><button class="btn btn-outline btn-sm btn-icon" onclick='openModalProveedor(${JSON.stringify(p)})' title="Editar">✏️</button><button class="btn btn-outline btn-sm btn-icon" onclick='eliminarProveedor(${JSON.stringify(p.id)}, ${JSON.stringify(p.nombre)})' title="Eliminar">🗑️</button></div></td>
   </tr>`).join('')||`<tr><td colspan="7" class="table-empty">Sin proveedores</td></tr>`;
   showPage(`<div class="card">
     <div class="card-header"><div class="card-title">Proveedores (${res.proveedores.length})</div></div>
@@ -2044,8 +2120,20 @@ function openModalProveedor(p) {
       if (res.success) { toast(res.message,'success'); closeModal(); await loadBaseData(); renderProveedores(); }
       else toast(res.error,'error');
     }},
+    ...(!esNuevo ? [{ label:'Eliminar', class:'btn-danger', fn:()=>eliminarProveedor(p.id, p.nombre, true) }] : []),
     { label:'Cancelar', class:'btn-outline', fn:closeModal }
   ]);
+}
+
+async function eliminarProveedor(id, nombre, desdeModal=false) {
+  if (!confirm(`¿Eliminar el proveedor "${nombre || ''}"?`)) return;
+  const res = await api('deleteProveedor', { id, nombre });
+  if (res.success) {
+    toast(res.message,'success');
+    if (desdeModal) closeModal();
+    await loadBaseData();
+    renderProveedores();
+  } else toast(res.error || 'No se pudo eliminar','error');
 }
 
 // ================================================================
