@@ -58,6 +58,7 @@ const withId = (snap) => ({ id: snap.id, ...snap.data() });
 function mapCategory(row) {
   return {
     id: row.id,
+    legacyId: pick(row,'legacyId','codigo','ID') || row.id,
     nombre: pick(row,'nombre','Nombre') || '',
     descripcion: pick(row,'descripcion','Descripción') || '',
     icono: pick(row,'icono','Ícono') || '📦',
@@ -233,13 +234,14 @@ function buildCategoryResolver(categories) {
   const byName = new Map();
   categories.forEach(c => {
     const mapped = mapCategory(c);
-    if (mapped.id) byId.set(mapped.id, mapped.nombre || '');
-    if (mapped.legacyId) byId.set(mapped.legacyId, mapped.nombre || '');
-    if (mapped.nombre) byName.set(normalizeKey(mapped.nombre), mapped.nombre);
+    const name = mapped.nombre || '';
+    if (mapped.id) byId.set(String(mapped.id).trim(), name);
+    if (mapped.legacyId) byId.set(String(mapped.legacyId).trim(), name);
+    if (name) byName.set(normalizeKey(name), name);
   });
   return function resolveCategory(item) {
-    const rawName = item.categoria || item.categoriaNombre || '';
-    const rawId = item.categoriaId || '';
+    const rawName = String(item.categoria || item.categoriaNombre || '').trim();
+    const rawId = String(item.categoriaId || '').trim();
     return byId.get(rawId) || byName.get(normalizeKey(rawName)) || rawName || 'Sin categoría';
   };
 }
@@ -1518,7 +1520,7 @@ function filtrarCatalogo() {
           <div style="display:flex;gap:4px">
             <button class="btn btn-outline btn-sm btn-icon" onclick="openModalEditarArticulo('${a.id}')" title="Editar">✏️</button>
             <button class="btn btn-outline btn-sm btn-icon" onclick="openModalCambiarEstado('${a.id}','${escHtml(a.nombre)}')" title="Estado">🔄</button>
-            <button class="btn btn-outline btn-sm btn-icon" onclick="eliminarArticulo('${a.id}','${escJs(a.nombre)}')" title="Eliminar">🗑️</button>
+            <button class="btn btn-outline btn-sm btn-icon" onclick='eliminarArticulo(${JSON.stringify(a.id)}, ${JSON.stringify(a.nombre || "")})' title="Eliminar">🗑️</button>
           </div>
         ` : ''}
       </td>
