@@ -218,17 +218,12 @@ async function getSettingsDoc() {
 }
 function csvEscape(v) {
   const s = String(v ?? '');
-  return /[",
-;]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function buildCsv(rows) {
   if (!rows.length) return '';
   const headers = Object.keys(rows[0]);
-  return [
-    headers.join(';'),
-    ...rows.map(r => headers.map(h => csvEscape(r[h])).join(';'))
-  ].join('
-');
+  return [headers.join(';'), ...rows.map(r => headers.map(h => csvEscape(r[h])).join(';'))].join('\n');
 }
 async function queryItems(data={}) {
   let rows = (await allDocs('items')).map(mapItem);
@@ -556,42 +551,49 @@ window.firebaseCompatApi = async function(action, data={}) {
       }
       case 'getReportes': {
         const tipo = data.tipo || '';
-        const items = await queryItems({ filtro:{} });
+        const items = await queryItems({});
         const loans = await queryLoans();
-        const movs = await queryMovements({ filtro:{} });
+        const movs = await queryMovements({});
         let rows = [];
         if (tipo === 'stock_categoria') {
           const grp = {};
-          items.forEach(i => { grp[i.categoria||'Sin categoría'] = (grp[i.categoria||'Sin categoría'] || 0) + (i.tipo==='consumible' ? i.stock : 1); });
-          rows = Object.entries(grp).map(([categoria,total]) => ({ categoria, total }));
+          items.forEach(i => { grp[i.categoria || 'Sin categoría'] = (grp[i.categoria || 'Sin categoría'] || 0) + (i.tipo === 'consumible' ? Number(i.stock || 0) : 1); });
+          rows = Object.entries(grp).map(([categoria, total]) => ({ categoria, total }));
         } else if (tipo === 'stock_critico') {
-          rows = items.filter(i => i.tipo==='consumible' && i.stock <= i.stockMinimo).map(i => ({ nombre:i.nombre, categoria:i.categoria, stock:i.stock, minimo:i.stockMinimo }));
+          rows = items.filter(i => i.tipo === 'consumible' && Number(i.stock || 0) <= Number(i.stockMinimo || 0))
+            .map(i => ({ nombre: i.nombre, categoria: i.categoria, stock: i.stock, minimo: i.stockMinimo }));
         } else if (tipo === 'prestamos_activos') {
-          rows = loans.filter(x => x.estado === 'activo').map(l => ({ articulo:l.articuloNombre, destinatario:l.destinatario, fechaPrestamo:l.fechaPrestamo, fechaDevolucionEsperada:l.fechaDevolucionEsperada }));
+          rows = loans.filter(l => l.estado === 'activo')
+            .map(l => ({ articulo: l.articuloNombre, destinatario: l.destinatario, fechaInicio: l.fechaInicio, fechaDevolucionEsperada: l.fechaDevolucionEsperada, proposito: l.proposito }));
         } else if (tipo === 'prestamos_vencidos') {
-          rows = loans.filter(x => x.estado === 'activo' && x.vencido).map(l => ({ articulo:l.articuloNombre, destinatario:l.destinatario, fechaDevolucionEsperada:l.fechaDevolucionEsperada, diasVencido:l.diasVencido }));
+          rows = loans.filter(l => l.estado === 'activo' && l.vencido)
+            .map(l => ({ articulo: l.articuloNombre, destinatario: l.destinatario, diasVencido: l.diasTranscurridos, fechaDevolucionEsperada: l.fechaDevolucionEsperada }));
         } else if (tipo === 'top_articulos') {
           const grp = {};
-          movs.filter(m => ['prestamo','entrega'].includes(m.tipo)).forEach(m => { grp[m.articuloNombre] = (grp[m.articuloNombre] || 0) + Number(m.cantidad || 1); });
+          movs.forEach(m => { if (m.articuloNombre) grp[m.articuloNombre] = (grp[m.articuloNombre] || 0) + 1; });
           rows = Object.entries(grp).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([articulo,total]) => ({ articulo, total }));
         } else if (tipo === 'sin_movimiento') {
-          const limite = Date.now() - 60*24*60*60*1000;
-          const ultimo = {};
-          movs.forEach(m => { ultimo[m.articuloId] = Math.max(ultimo[m.articuloId] || 0, new Date(m.fecha).getTime() || 0); });
-          rows = items.filter(i => !ultimo[i.id] || ultimo[i.id] < limite).map(i => ({ articulo:i.nombre, categoria:i.categoria, ubicacion:i.ubicacion }));
+          const cutoff = Date.now() - 60 * 86400000;
+          const used = new Set(movs.filter(m => new Date(m.fecha).getTime() >= cutoff).map(m => m.articuloId));
+          rows = items.filter(i => !used.has(i.id)).map(i => ({ articulo: i.nombre, categoria: i.categoria, ubicacion: i.ubicacion }));
         } else if (tipo === 'multiples_prestamos') {
           const grp = {};
-          loans.filter(x => x.estado === 'activo').forEach(l => { grp[l.destinatario] = (grp[l.destinatario] || 0) + 1; });
-          rows = Object.entries(grp).filter(([,c])=>c>1).map(([destinatario,total]) => ({ destinatario, total }));
+          loans.filter(l => l.estado === 'activo').forEach(l => { grp[l.destinatario] = (grp[l.destinatario] || 0) + 1; });
+          rows = Object.entries(grp).filter(([,c]) => c > 1).map(([destinatario,total]) => ({ destinatario, total }));
         } else if (tipo === 'movimientos_periodo') {
-          rows = movs.map(m => ({ fecha:m.fecha, tipo:m.tipo, articulo:m.articuloNombre, categoria:m.categoria, destinatario:m.destinatario, cantidad:m.cantidad, usuario:m.usuario }));
+          rows = movs.map(m => ({ fecha: m.fecha, tipo: m.tipo, articulo: m.articuloNombre, categoria: m.categoria, destinatario: m.destinatario, cantidad: m.cantidad, usuario: m.usuario }));
         }
-        const headers = rows.length ? Object.keys(rows[0]).map(k => k.replace(/([A-Z])/g,' $1').replace(/^./, s => s.toUpperCase())) : [];
-        return { success:true, datos: rows, headers };
+        return {
+          success: true,
+          datos: rows,
+          rows,
+          headers: rows.length ? Object.keys(rows[0]) : [],
+          html: rows.length ? '<pre style="white-space:pre-wrap;font-size:12px">' + JSON.stringify(rows.slice(0,50), null, 2) + '</pre>' : '<div class="card"><p>Sin datos</p></div>'
+        };
       }
       case 'exportCSV': {
-        const rep = await window.firebaseCompatApi('getReportes', { tipo:data.tipo });
-        return { success:true, csv: buildCsv(rep.datos || []), filename: `${data.tipo || 'reporte'}.csv` };
+        const rep = await window.firebaseCompatApi('getReportes', { tipo: data.tipo });
+        return { success:true, csv: buildCsv(rep.datos || rep.rows || []), filename: `${data.tipo || 'reporte'}.csv` };
       }
       default:
         return { success:false, error:'Acción Firebase no implementada: ' + action };
@@ -1369,7 +1371,7 @@ async function submitMR() {
 // ================================================================
 // CATÁLOGO
 // ================================================================
-async async function renderCatalogo() {
+async function renderCatalogo() {
   setTopbarActions(hasPermission(['admin','encargado'])?'<button class="topbar-btn gold" onclick="openModalNuevoArticulo()">+ Nuevo Artículo</button>':'');
   const res = await api('getArticulos', { filtro:{} });
   if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
@@ -1741,7 +1743,7 @@ async function submitIngreso() {
 // ================================================================
 // HISTORIAL
 // ================================================================
-async async function renderHistorial() {
+async function renderHistorial() {
   setTopbarActions(`<button class="topbar-btn" onclick="exportHistorial()">⬇️ <span>Exportar CSV</span></button>`);
   const res = await api('getMovimientos', { filtro:{ limite:200 } });
   if (!res.success) { showPage('<div class="card"><p>Error</p></div>'); return; }
