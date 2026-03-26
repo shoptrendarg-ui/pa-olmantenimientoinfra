@@ -1362,7 +1362,8 @@ async function renderDashboard() {
 // MOVIMIENTO RÁPIDO
 // ================================================================
 async function renderMovimientoRapido() {
-  if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
+if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
+if (!appData.personal.length)  appData.personal  = await window.DB.getPersonal(true);
   showPage(`<div style="max-width:560px;margin:0 auto"><div class="card">
     <div class="card-header"><div class="card-title">⚡ Movimiento Rápido</div></div>
     <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px">Registrá cualquier operación en segundos.</p>
@@ -1680,8 +1681,8 @@ async function submitEntrega() {
 // NUEVO PRÉSTAMO
 // ================================================================
 async function renderNuevoPrestamo() {
-  if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
-  const reutilizables = appData.articulos.filter(a => a.tipo === 'reutilizable' && a.estado === 'disponible');
+if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
+if (!appData.personal.length)  appData.personal  = await window.DB.getPersonal(true);  const reutilizables = appData.articulos.filter(a => a.tipo === 'reutilizable' && a.estado === 'disponible');
   showPage(`<div style="max-width:620px;margin:0 auto"><div class="card">
     <div class="card-header"><div class="card-title">📋 Registrar Préstamo</div></div>
     <div class="form-grid">
