@@ -348,19 +348,22 @@ window.DB = {
 
   async saveItem(data) {
     const isEdit = !!data.id;
+    // FIX: categoriaId ahora se persiste junto al nombre de categoría.
+    // Antes sólo se guardaba el nombre → todos los artículos quedaban con categoriaId=null.
     const payload = {
-      nombre:         data.nombre || '',
-      descripcion:    data.descripcion || '',
-      tipo:           data.tipo || 'consumible',
-      categoriaNombre:data.categoria || '',
-      categoria:      data.categoria || '',
-      unidad:         data.unidad || 'unidad',
-      ubicacion:      data.ubicacion || '',
-      nroPatrimonial: data.nroPatrimonial || '',
-      nroSerie:       data.nroSerie || '',
-      fechaVencimiento: data.fechaVencimiento || '',
-      observaciones:  data.observaciones || '',
-      activo:         true
+      nombre:          data.nombre || '',
+      descripcion:     data.descripcion || '',
+      tipo:            data.tipo || 'consumible',
+      categoriaId:     data.categoriaId    || '',
+      categoriaNombre: data.categoriaNombre || data.categoria || '',
+      categoria:       data.categoriaNombre || data.categoria || '',
+      unidad:          data.unidad || 'unidad',
+      ubicacion:       data.ubicacion || '',
+      nroPatrimonial:  data.nroPatrimonial || '',
+      nroSerie:        data.nroSerie || '',
+      fechaVencimiento:data.fechaVencimiento || null,
+      observaciones:   data.observaciones || '',
+      activo:          true
     };
     if (data.tipo === 'consumible') {
       payload.stockActual = isEdit ? undefined : Number(data.stockInicial ?? 0);
@@ -541,11 +544,17 @@ window.DB = {
     else { await addOne('categories', payload); await audit('NEW_CAT', data.nombre); }
   },
 
-  // Eliminar categoría solo si no está en uso
+  // Eliminar categoría solo si no está en uso (incluyendo artículos inactivos/soft-deleted)
   async deleteCategoria(id, nombre) {
-    const items = await DB.getItems();
-    const inUse = items.filter(i => i.categoriaId === id || i.categoria === nombre);
-    if (inUse.length) return { error: `No se puede eliminar: ${inUse.length} artículo(s) la usan` };
+    // FIX: se revisan TODOS los items (activos e inactivos) para evitar romper
+    // referencias de artículos desactivados que apuntan a esta categoría.
+    const allItemDocs = await getAll('items');
+    const allItems    = allItemDocs.map(mapItem);
+    const inUse       = allItems.filter(i =>
+      i.categoriaId === id ||
+      (i.categoria || '').toLowerCase() === (nombre || '').toLowerCase()
+    );
+    if (inUse.length) return { error: `No se puede eliminar: ${inUse.length} artículo(s) la usan (incluye inactivos)` };
     await deleteOne('categories', id);
     await audit('DELETE_CAT', nombre);
     return { ok: true };
@@ -2299,7 +2308,11 @@ async function renderAuditoria() {
 // MODAL NUEVO ARTÍCULO
 // ================================================================
 async function openModalNuevoArticulo() {
-  const catOpts = appData.categorias.map(c => `<option value="${escHtml(c.nombre)}">${c.icono} ${escHtml(c.nombre)}</option>`).join('');
+  // FIX: el value del option ahora es el ID de la categoría, no el nombre.
+  // Antes se guardaba solo el nombre y categoriaId quedaba siempre null en Firestore.
+  const catOpts = appData.categorias.map(c =>
+    `<option value="${escHtml(c.id)}" data-nombre="${escHtml(c.nombre)}">${c.icono} ${escHtml(c.nombre)}</option>`
+  ).join('');
   openModal('Nuevo Artículo', `
     <div class="tabs" id="art-tabs">
       <button class="tab-btn active" onclick="setArtTab('consumible',this)">📦 Consumible</button>
@@ -2319,13 +2332,19 @@ async function openModalNuevoArticulo() {
       <div class="form-group form-full"><label>Observaciones</label><textarea class="form-control" id="am-obs"></textarea></div>
     </div>`, [
     { label:'Crear Artículo', class:'btn-gold', fn: async () => {
-      const nombre = document.getElementById('am-nombre').value.trim();
-      const cat    = document.getElementById('am-cat').value;
-      const tipo   = document.getElementById('art-tipo-data').dataset.tipo;
+      const nombre  = document.getElementById('am-nombre').value.trim();
+      // FIX: leer id Y nombre del option seleccionado
+      const catSel  = document.getElementById('am-cat');
+      const catId   = catSel.value;
+      const catNom  = catSel.options[catSel.selectedIndex]?.dataset.nombre || '';
+      const tipo    = document.getElementById('art-tipo-data').dataset.tipo;
       if (!nombre) { toast('El nombre es obligatorio','error'); return; }
-      if (!cat)    { toast('La categoría es obligatoria','error'); return; }
+      if (!catId)  { toast('La categoría es obligatoria','error'); return; }
       const data = {
-        nombre, tipo, categoria: cat,
+        nombre, tipo,
+        categoriaId:     catId,
+        categoria:       catNom,
+        categoriaNombre: catNom,
         descripcion:    document.getElementById('am-desc').value,
         unidad:         document.getElementById('am-unidad').value || 'unidad',
         ubicacion:      document.getElementById('am-ubicacion').value,
@@ -2371,7 +2390,14 @@ function setArtTab(tipo, btn) {
 async function openModalEditarArticulo(id) {
   const art = appData.articulos.find(a => a.id === id);
   if (!art) return;
-  const catOpts = appData.categorias.map(c => `<option value="${escHtml(c.nombre)}" ${c.nombre===art.categoria?'selected':''}>${c.icono} ${escHtml(c.nombre)}</option>`).join('');
+  // FIX: value = categoriaId, data-nombre = nombre legible.
+  // La selección actual se determina primero por categoriaId (robusto), luego por nombre (fallback legacy).
+  const catOpts = appData.categorias.map(c =>
+    `<option value="${escHtml(c.id)}" data-nombre="${escHtml(c.nombre)}"
+      ${(art.categoriaId ? c.id === art.categoriaId : c.nombre === art.categoria) ? 'selected' : ''}>
+      ${c.icono} ${escHtml(c.nombre)}
+    </option>`
+  ).join('');
   openModal('Editar Artículo', `
     <div class="form-grid">
       <div class="form-group form-full"><label>Nombre <span class="req">*</span></label><input type="text" class="form-control" id="em-nombre" value="${escHtml(art.nombre)}"></div>
@@ -2391,12 +2417,18 @@ async function openModalEditarArticulo(id) {
     { label:'Guardar', class:'btn-gold', fn: async () => {
       const nombre = document.getElementById('em-nombre').value.trim();
       if (!nombre) { toast('El nombre es obligatorio','error'); return; }
+      // FIX: leer id Y nombre del option seleccionado para persistir categoriaId
+      const catSelE = document.getElementById('em-cat');
+      const catIdE  = catSelE.value;
+      const catNomE = catSelE.options[catSelE.selectedIndex]?.dataset.nombre || '';
       await window.DB.saveItem({
         id:              art.id,
         tipo:            art.tipo,
         nombre,
         descripcion:     document.getElementById('em-desc').value,
-        categoria:       document.getElementById('em-cat').value,
+        categoriaId:     catIdE,
+        categoria:       catNomE,
+        categoriaNombre: catNomE,
         unidad:          document.getElementById('em-unidad').value,
         ubicacion:       document.getElementById('em-ubicacion').value,
         nroPatrimonial:  document.getElementById('em-patrimonio').value,
