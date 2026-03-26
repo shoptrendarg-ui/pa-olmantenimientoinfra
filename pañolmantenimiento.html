@@ -348,8 +348,6 @@ window.DB = {
 
   async saveItem(data) {
     const isEdit = !!data.id;
-    // FIX: categoriaId ahora se persiste junto al nombre de categoría.
-    // Antes sólo se guardaba el nombre → todos los artículos quedaban con categoriaId=null.
     const payload = {
       nombre:          data.nombre || '',
       descripcion:     data.descripcion || '',
@@ -369,12 +367,11 @@ window.DB = {
       payload.stockActual = isEdit ? undefined : Number(data.stockInicial ?? 0);
       payload.stockMinimo = Number(data.stockMinimo ?? 0);
       payload.stockMaximo = Number(data.stockMaximo ?? 0);
-      if (isEdit) delete payload.stockActual; // no sobreescribir stock al editar
+      if (isEdit) delete payload.stockActual;
     } else {
       payload.estado = isEdit ? data.estado : (data.estado || 'disponible');
     }
     if (isEdit) {
-      // Al editar consumible, actualizar config pero NO stock
       if (data.tipo === 'consumible') delete payload.stockActual;
       await updateOne('items', data.id, payload);
       await audit('EDIT_ARTICULO', data.nombre);
@@ -382,7 +379,6 @@ window.DB = {
     } else {
       const id = await addOne('items', payload);
       await audit('NEW_ARTICULO', data.nombre);
-      // Stock inicial → registrar ingreso
       if (data.tipo === 'consumible' && Number(data.stockInicial) > 0) {
         await DB.saveMovimiento({
           tipo: 'ingreso',
@@ -398,7 +394,6 @@ window.DB = {
     }
   },
 
-  // Soft delete — marca activo:false, oculta en toda la UI
   async softDeleteItem(id, nombre) {
     await updateOne('items', id, { activo: false });
     await audit('DELETE_ARTICULO_SOFT', nombre || id);
@@ -445,7 +440,6 @@ window.DB = {
       if (tipo === 'entrega')  nuevoStock -= cant;
       if (nuevoStock < 0) return { error: `Stock insuficiente. Disponible: ${item.stock}` };
       await updateOne('items', item.id, { stockActual: nuevoStock });
-      // Alertas automáticas
       if (tipo === 'entrega') {
         if (nuevoStock === 0)
           await createAlertIfNeeded(item.id, item.nombre, 'stock_cero', 'Stock agotado');
@@ -453,11 +447,9 @@ window.DB = {
           await createAlertIfNeeded(item.id, item.nombre, 'stock_minimo', `Stock: ${nuevoStock} / Mínimo: ${item.stockMinimo}`);
       }
     } else {
-      // Reutilizable
       if (tipo === 'prestamo') {
         if (item.estado !== 'disponible') return { error: `No disponible. Estado actual: ${item.estado}` };
         await updateOne('items', item.id, { estado: 'prestado' });
-        // Registrar en loans
         const fechaDev = data.fechaDevolucionEsperada ? Timestamp.fromDate(new Date(data.fechaDevolucionEsperada)) : null;
         await addOne('loans', {
           itemId:                  item.id,
@@ -544,10 +536,7 @@ window.DB = {
     else { await addOne('categories', payload); await audit('NEW_CAT', data.nombre); }
   },
 
-  // Eliminar categoría solo si no está en uso (incluyendo artículos inactivos/soft-deleted)
   async deleteCategoria(id, nombre) {
-    // FIX: se revisan TODOS los items (activos e inactivos) para evitar romper
-    // referencias de artículos desactivados que apuntan a esta categoría.
     const allItemDocs = await getAll('items');
     const allItems    = allItemDocs.map(mapItem);
     const inUse       = allItems.filter(i =>
@@ -994,6 +983,22 @@ textarea.form-control{resize:vertical;min-height:80px}
 .row-vencido{background:#fff1f1!important}
 .row-vencido:hover{background:#ffe4e4!important}
 
+/* ── ARTICLE SEARCH WIDGET ── */
+.art-search-wrap{position:relative;display:flex;flex-direction:column;gap:6px}
+.art-search-input{border:1px solid var(--border);border-radius:7px;padding:9px 13px 9px 36px;font-size:14px;color:var(--text);background:var(--white);transition:var(--transition);outline:none;width:100%}
+.art-search-input:focus{border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,42,74,.08)}
+.art-search-icon{position:absolute;left:12px;top:10px;font-size:14px;pointer-events:none;color:var(--text-muted)}
+.art-search-dropdown{position:absolute;top:calc(100% + 2px);left:0;right:0;background:var(--white);border:1px solid var(--border);border-radius:7px;box-shadow:var(--shadow-lg);z-index:50;max-height:220px;overflow-y:auto;display:none}
+.art-search-dropdown.open{display:block}
+.art-search-item{padding:9px 13px;font-size:13.5px;cursor:pointer;display:flex;flex-direction:column;gap:2px;border-bottom:1px solid var(--border);transition:background .12s}
+.art-search-item:last-child{border-bottom:none}
+.art-search-item:hover,.art-search-item.highlighted{background:var(--bg)}
+.art-search-item-name{font-weight:600;color:var(--navy)}
+.art-search-item-meta{font-size:11px;color:var(--text-muted)}
+.art-search-item.disabled-item{opacity:.5;cursor:not-allowed;pointer-events:none}
+.art-search-empty{padding:12px 13px;font-size:13px;color:var(--text-muted);text-align:center}
+.art-select-fallback{display:block;margin-top:2px}
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes scaleIn{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}
@@ -1280,6 +1285,126 @@ function navigateTo(pageId) {
 }
 
 // ================================================================
+// ARTICLE SEARCH WIDGET
+// ================================================================
+// Genera un widget de búsqueda + select sincronizado para artículos.
+// selectId: id del <select> oculto que el resto del sistema usa para leer el valor.
+// articles: array de objetos artículo (con id, nombre, tipo, stock, estado, unidad).
+// onSelect: callback opcional(artId) cuando el usuario elige un artículo.
+// metaFn: función opcional(art) → string de metadatos a mostrar bajo el nombre.
+function buildArticleSearch(containerId, articles, onSelect, metaFn) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Construir opciones del select (respetando el mismo formato original)
+  let selectOpts = `<option value="">— Seleccioná artículo —</option>`;
+  articles.forEach(a => {
+    const extra = a.tipo === 'consumible' ? ` (Stock: ${a.stock})` : ` (${a.estado})`;
+    selectOpts += `<option value="${a.id}">${escHtml(a.nombre)}${extra}</option>`;
+  });
+
+  const defaultMetaFn = (a) => {
+    if (a.tipo === 'consumible') return `Stock: ${a.stock} ${a.unidad || ''} · ${escHtml(a.categoria || '')}`;
+    return `${a.estado || ''} · ${escHtml(a.categoria || '')}`;
+  };
+  const getMetaStr = metaFn || defaultMetaFn;
+
+  container.innerHTML = `
+    <div class="art-search-wrap" id="${containerId}-wrap">
+      <span class="art-search-icon">🔍</span>
+      <input
+        type="text"
+        class="art-search-input"
+        id="${containerId}-search"
+        placeholder="Escribí para buscar artículo..."
+        autocomplete="off"
+      >
+      <div class="art-search-dropdown" id="${containerId}-dd"></div>
+    </div>
+    <select class="form-control art-select-fallback" id="${containerId}-select" style="margin-top:6px">
+      ${selectOpts}
+    </select>
+    <span class="form-hint">Buscá arriba o seleccioná del desplegable</span>
+  `;
+
+  const searchInput = document.getElementById(`${containerId}-search`);
+  const dropdown    = document.getElementById(`${containerId}-dd`);
+  const selectEl    = document.getElementById(`${containerId}-select`);
+
+  function renderDropdown(filtered) {
+    if (!filtered.length) {
+      dropdown.innerHTML = `<div class="art-search-empty">Sin resultados</div>`;
+    } else {
+      dropdown.innerHTML = filtered.map(a => {
+        const meta = getMetaStr(a);
+        return `<div class="art-search-item" data-id="${a.id}" data-nombre="${escHtml(a.nombre)}">
+          <span class="art-search-item-name">${escHtml(a.nombre)}</span>
+          <span class="art-search-item-meta">${meta}</span>
+        </div>`;
+      }).join('');
+      dropdown.querySelectorAll('.art-search-item').forEach(item => {
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          const id     = item.dataset.id;
+          const nombre = item.dataset.nombre;
+          selectArticle(id, nombre);
+        });
+      });
+    }
+    dropdown.classList.add('open');
+  }
+
+  function selectArticle(id, nombre) {
+    searchInput.value  = nombre;
+    selectEl.value     = id;
+    dropdown.classList.remove('open');
+    // Disparar evento change en el select para que updateStockInfo funcione si está enlazado
+    selectEl.dispatchEvent(new Event('change'));
+    if (typeof onSelect === 'function') onSelect(id);
+  }
+
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    if (!q) { dropdown.classList.remove('open'); selectEl.value = ''; return; }
+    const filtered = articles.filter(a =>
+      a.nombre.toLowerCase().includes(q) ||
+      (a.descripcion || '').toLowerCase().includes(q) ||
+      (a.nroPatrimonial || '').toLowerCase().includes(q) ||
+      (a.categoria || '').toLowerCase().includes(q)
+    );
+    renderDropdown(filtered);
+  });
+
+  searchInput.addEventListener('focus', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    if (q) {
+      const filtered = articles.filter(a => a.nombre.toLowerCase().includes(q));
+      renderDropdown(filtered);
+    }
+  });
+
+  searchInput.addEventListener('blur', () => {
+    setTimeout(() => dropdown.classList.remove('open'), 150);
+  });
+
+  // Sincronización select → search (si el usuario usa el desplegable)
+  selectEl.addEventListener('change', () => {
+    const selId = selectEl.value;
+    if (!selId) { searchInput.value = ''; return; }
+    const art = articles.find(a => a.id === selId);
+    if (art) searchInput.value = art.nombre;
+    if (typeof onSelect === 'function') onSelect(selId);
+  });
+}
+
+// Función helper: devuelve el valor seleccionado del widget de artículo
+// dado el containerId del widget (lee del select interno)
+function getArticleSearchValue(containerId) {
+  const sel = document.getElementById(`${containerId}-select`);
+  return sel ? sel.value : '';
+}
+
+// ================================================================
 // DASHBOARD
 // ================================================================
 async function renderDashboard() {
@@ -1362,8 +1487,8 @@ async function renderDashboard() {
 // MOVIMIENTO RÁPIDO
 // ================================================================
 async function renderMovimientoRapido() {
-if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
-if (!appData.personal.length)  appData.personal  = await window.DB.getPersonal(true);
+  if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
+  if (!appData.personal.length)  appData.personal  = await window.DB.getPersonal(true);
   showPage(`<div style="max-width:560px;margin:0 auto"><div class="card">
     <div class="card-header"><div class="card-title">⚡ Movimiento Rápido</div></div>
     <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px">Registrá cualquier operación en segundos.</p>
@@ -1387,11 +1512,6 @@ function setMRTab(tipo, btn) {
     tipo === 'entrega'  ? a.tipo === 'consumible' :
     tipo === 'prestamo' ? a.tipo === 'reutilizable' : true
   );
-  let artOpts = `<option value="">— Seleccioná artículo —</option>`;
-  artsF.forEach(a => {
-    const extra = a.tipo === 'consumible' ? ` (Stock: ${a.stock})` : ` (${a.estado})`;
-    artOpts += `<option value="${a.id}">${escHtml(a.nombre)}${extra}</option>`;
-  });
 
   const destField = tipo !== 'ingreso' ? `
     <div class="form-group"><label>Destinatario <span class="req">*</span></label>
@@ -1416,17 +1536,35 @@ function setMRTab(tipo, btn) {
     <div class="form-group"><label>Fecha Devolución</label><input type="date" class="form-control" id="mr-fecha-dev" value="${getFutureDate(3)}"></div>
     <div class="form-group"><label>Propósito</label><input type="text" class="form-control" id="mr-proposito" placeholder="Ej: Reparación Edificio B"></div>`;
 
+  // ── CAMBIO: reemplazar el <select> de artículo por el widget de búsqueda ──
   document.getElementById('mr-form').innerHTML = `
     <div class="form-grid">
-      <div class="form-group form-full"><label>Artículo <span class="req">*</span></label><select class="form-control" id="mr-art">${artOpts}</select></div>
+      <div class="form-group form-full">
+        <label>Artículo <span class="req">*</span></label>
+        <div id="mr-art-container"></div>
+        <div id="mr-art-stock" style="margin-top:6px"></div>
+      </div>
       ${destField}${cantField}
       <div class="form-group form-full"><label>Observaciones</label><input type="text" class="form-control" id="mr-obs" placeholder="Opcional"></div>
     </div>
     <div style="margin-top:20px"><button class="btn btn-gold" style="width:100%;padding:14px" id="mr-btn" onclick="submitMR()">✓ Confirmar ${tipo==='entrega'?'Entrega':tipo==='prestamo'?'Préstamo':'Ingreso'}</button></div>`;
+
+  // Inicializar widget de búsqueda para mr-art
+  buildArticleSearch('mr-art-container', artsF, (artId) => {
+    // Actualizar info de stock al seleccionar
+    const art = artsF.find(a => a.id === artId);
+    const el  = document.getElementById('mr-art-stock');
+    if (el && art && art.tipo === 'consumible') {
+      el.innerHTML = getStockBadge(art.stock, art.stockMinimo);
+    } else if (el) {
+      el.innerHTML = art ? getEstadoBadge(art.estado) : '';
+    }
+  });
 }
 
 async function submitMR() {
-  const artId = document.getElementById('mr-art')?.value;
+  // Leer articuloId del select interno del widget
+  const artId = getArticleSearchValue('mr-art-container');
   const obs   = document.getElementById('mr-obs')?.value || '';
   if (!artId) { toast('Seleccioná un artículo','error'); return; }
 
@@ -1631,14 +1769,15 @@ function toggleNovedad(si) {
 async function renderEntregas() {
   if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
   const cons = appData.articulos.filter(a => a.tipo === 'consumible');
+
   showPage(`<div style="max-width:620px;margin:0 auto"><div class="card">
     <div class="card-header"><div class="card-title">📤 Registrar Entrega</div></div>
     <div class="form-grid">
-      <div class="form-group form-full"><label>Artículo <span class="req">*</span></label>
-        <select class="form-control" id="ent-art" onchange="updateStockInfo(this,'ent-stock')">
-          <option value="">— Seleccioná artículo —</option>
-          ${cons.map(a => `<option value="${a.id}" data-stock="${a.stock}" data-min="${a.stockMinimo}">${escHtml(a.nombre)} — Stock: ${a.stock} ${a.unidad}</option>`).join('')}
-        </select><div id="ent-stock" style="margin-top:6px"></div></div>
+      <div class="form-group form-full">
+        <label>Artículo <span class="req">*</span></label>
+        <div id="ent-art-container"></div>
+        <div id="ent-stock" style="margin-top:6px"></div>
+      </div>
       <div class="form-group"><label>Destinatario <span class="req">*</span></label>
         <select class="form-control" id="ent-dest" onchange="handleOtro(this,'ent-otro-wrap')">
           <option value="">— Seleccioná persona —</option>
@@ -1658,10 +1797,18 @@ async function renderEntregas() {
       <button class="btn btn-gold" id="ent-btn" onclick="submitEntrega()">📤 Confirmar Entrega</button>
     </div>
   </div></div>`);
+
+  // Inicializar widget de búsqueda para ent-art
+  buildArticleSearch('ent-art-container', cons, (artId) => {
+    const art = cons.find(a => a.id === artId);
+    const el  = document.getElementById('ent-stock');
+    if (el && art) el.innerHTML = getStockBadge(art.stock, art.stockMinimo);
+    else if (el) el.innerHTML = '';
+  });
 }
 
 async function submitEntrega() {
-  const artId   = document.getElementById('ent-art').value;
+  const artId   = getArticleSearchValue('ent-art-container');
   const cant    = parseInt(document.getElementById('ent-cant').value);
   const destSel = document.getElementById('ent-dest').value;
   const obs     = document.getElementById('ent-obs').value;
@@ -1681,17 +1828,18 @@ async function submitEntrega() {
 // NUEVO PRÉSTAMO
 // ================================================================
 async function renderNuevoPrestamo() {
-if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
-if (!appData.personal.length)  appData.personal  = await window.DB.getPersonal(true);  const reutilizables = appData.articulos.filter(a => a.tipo === 'reutilizable' && a.estado === 'disponible');
+  if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
+  if (!appData.personal.length)  appData.personal  = await window.DB.getPersonal(true);
+  const reutilizables = appData.articulos.filter(a => a.tipo === 'reutilizable' && a.estado === 'disponible');
+
   showPage(`<div style="max-width:620px;margin:0 auto"><div class="card">
     <div class="card-header"><div class="card-title">📋 Registrar Préstamo</div></div>
     <div class="form-grid">
-      <div class="form-group form-full"><label>Artículo disponible <span class="req">*</span></label>
-        <select class="form-control" id="pr-art">
-          <option value="">— Seleccioná herramienta —</option>
-          ${reutilizables.map(a => `<option value="${a.id}">${escHtml(a.nombre)}${a.nroPatrimonial ? ' · Pat:' + a.nroPatrimonial : ''}</option>`).join('')}
-        </select>
-        ${reutilizables.length === 0 ? '<p class="form-hint" style="color:var(--warning)">⚠ No hay herramientas disponibles en este momento</p>' : ''}</div>
+      <div class="form-group form-full">
+        <label>Artículo disponible <span class="req">*</span></label>
+        <div id="pr-art-container"></div>
+        ${reutilizables.length === 0 ? '<p class="form-hint" style="color:var(--warning)">⚠ No hay herramientas disponibles en este momento</p>' : ''}
+      </div>
       <div class="form-group"><label>Destinatario <span class="req">*</span></label>
         <select class="form-control" id="pr-dest" onchange="handleOtro(this,'pr-otro-wrap')">
           <option value="">— Seleccioná persona —</option>
@@ -1711,11 +1859,16 @@ if (!appData.personal.length)  appData.personal  = await window.DB.getPersonal(t
       <button class="btn btn-gold" id="pr-btn" onclick="submitPrestamo()">📋 Confirmar Préstamo</button>
     </div>
   </div></div>`);
+
+  // Inicializar widget de búsqueda para pr-art
+  buildArticleSearch('pr-art-container', reutilizables, null, (a) => {
+    return `${a.estado || 'disponible'} · ${escHtml(a.categoria || '')}${a.nroPatrimonial ? ' · Pat:' + a.nroPatrimonial : ''}`;
+  });
 }
 
 async function submitPrestamo() {
-  const artId   = document.getElementById('pr-art').value;
-  const destSel = document.getElementById('pr-dest').value;
+  const artId    = getArticleSearchValue('pr-art-container');
+  const destSel  = document.getElementById('pr-dest').value;
   const fechaDev = document.getElementById('pr-fecha-dev').value;
   const proposito = document.getElementById('pr-proposito').value;
   const obs = document.getElementById('pr-obs').value;
@@ -1787,14 +1940,15 @@ async function submitDevolucion() {
 async function renderIngresoStock() {
   if (!appData.articulos.length) appData.articulos = await window.DB.getItems();
   const cons = appData.articulos.filter(a => a.tipo === 'consumible');
+
   showPage(`<div style="max-width:620px;margin:0 auto"><div class="card">
     <div class="card-header"><div class="card-title">📨 Ingreso de Stock</div></div>
     <div class="form-grid">
-      <div class="form-group form-full"><label>Artículo <span class="req">*</span></label>
-        <select class="form-control" id="is-art" onchange="updateStockInfo(this,'is-stock')">
-          <option value="">— Seleccioná artículo —</option>
-          ${cons.map(a => `<option value="${a.id}" data-stock="${a.stock}" data-min="${a.stockMinimo}">${escHtml(a.nombre)} — Stock actual: ${a.stock} ${a.unidad}</option>`).join('')}
-        </select><div id="is-stock" style="margin-top:6px"></div></div>
+      <div class="form-group form-full">
+        <label>Artículo <span class="req">*</span></label>
+        <div id="is-art-container"></div>
+        <div id="is-stock" style="margin-top:6px"></div>
+      </div>
       <div class="form-group"><label>Cantidad recibida <span class="req">*</span></label><input type="number" class="form-control" id="is-cant" min="1" value="1"></div>
       <div class="form-group"><label>Proveedor</label>
         <select class="form-control" id="is-prov">
@@ -1809,13 +1963,22 @@ async function renderIngresoStock() {
       <button class="btn btn-primary" id="is-btn" onclick="submitIngreso()">📨 Confirmar Ingreso</button>
     </div>
   </div></div>`);
+
+  // Inicializar widget de búsqueda para is-art
+  buildArticleSearch('is-art-container', cons, (artId) => {
+    const art = cons.find(a => a.id === artId);
+    const el  = document.getElementById('is-stock');
+    if (el && art) el.innerHTML = getStockBadge(art.stock, art.stockMinimo);
+    else if (el) el.innerHTML = '';
+  });
 }
+
 async function submitIngreso() {
-  const artId = document.getElementById('is-art').value;
-  const cant  = parseInt(document.getElementById('is-cant').value);
-  const prov  = document.getElementById('is-prov').value;
+  const artId  = getArticleSearchValue('is-art-container');
+  const cant   = parseInt(document.getElementById('is-cant').value);
+  const prov   = document.getElementById('is-prov').value;
   const remito = document.getElementById('is-remito').value;
-  const obs   = document.getElementById('is-obs').value;
+  const obs    = document.getElementById('is-obs').value;
   if (!artId) { toast('Seleccioná un artículo','error'); return; }
   if (!cant || cant < 1) { toast('Cantidad inválida','error'); return; }
   const btn = document.getElementById('is-btn'); btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Registrando...';
@@ -2309,8 +2472,6 @@ async function renderAuditoria() {
 // MODAL NUEVO ARTÍCULO
 // ================================================================
 async function openModalNuevoArticulo() {
-  // FIX: el value del option ahora es el ID de la categoría, no el nombre.
-  // Antes se guardaba solo el nombre y categoriaId quedaba siempre null en Firestore.
   const catOpts = appData.categorias.map(c =>
     `<option value="${escHtml(c.id)}" data-nombre="${escHtml(c.nombre)}">${c.icono} ${escHtml(c.nombre)}</option>`
   ).join('');
@@ -2334,7 +2495,6 @@ async function openModalNuevoArticulo() {
     </div>`, [
     { label:'Crear Artículo', class:'btn-gold', fn: async () => {
       const nombre  = document.getElementById('am-nombre').value.trim();
-      // FIX: leer id Y nombre del option seleccionado
       const catSel  = document.getElementById('am-cat');
       const catId   = catSel.value;
       const catNom  = catSel.options[catSel.selectedIndex]?.dataset.nombre || '';
@@ -2386,13 +2546,11 @@ function setArtTab(tipo, btn) {
 }
 
 // ================================================================
-// MODAL EDITAR ARTÍCULO — 100% Firebase, sin api()
+// MODAL EDITAR ARTÍCULO
 // ================================================================
 async function openModalEditarArticulo(id) {
   const art = appData.articulos.find(a => a.id === id);
   if (!art) return;
-  // FIX: value = categoriaId, data-nombre = nombre legible.
-  // La selección actual se determina primero por categoriaId (robusto), luego por nombre (fallback legacy).
   const catOpts = appData.categorias.map(c =>
     `<option value="${escHtml(c.id)}" data-nombre="${escHtml(c.nombre)}"
       ${(art.categoriaId ? c.id === art.categoriaId : c.nombre === art.categoria) ? 'selected' : ''}>
@@ -2418,7 +2576,6 @@ async function openModalEditarArticulo(id) {
     { label:'Guardar', class:'btn-gold', fn: async () => {
       const nombre = document.getElementById('em-nombre').value.trim();
       if (!nombre) { toast('El nombre es obligatorio','error'); return; }
-      // FIX: leer id Y nombre del option seleccionado para persistir categoriaId
       const catSelE = document.getElementById('em-cat');
       const catIdE  = catSelE.value;
       const catNomE = catSelE.options[catSelE.selectedIndex]?.dataset.nombre || '';
@@ -2450,7 +2607,7 @@ async function openModalEditarArticulo(id) {
 }
 
 // ================================================================
-// MODAL CAMBIAR ESTADO — 100% Firebase, sin api()
+// MODAL CAMBIAR ESTADO
 // ================================================================
 function openModalCambiarEstado(artId, artNombre) {
   openModal('Cambiar Estado de Artículo', `
